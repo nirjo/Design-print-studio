@@ -1,0 +1,100 @@
+{
+  "theme": "Dark",
+  "archetype": "4 (Swiss & High-Contrast) customized for Print Studio (CMYK)",
+  "colors": {
+    "background": {
+      "primary": "#0A0A0A",
+      "secondary": "#151515",
+      "surface": "#1F1F1F",
+      "overlay": "rgba(0, 0, 0, 0.8)"
+    },
+    "text": {
+      "primary": "#FFFFFF",
+      "secondary": "#B0B0B0",
+      "accent_cyan": "#00B4FF",
+      "accent_magenta": "#FF1F8F",
+      "accent_yellow": "#FFC400"
+    },
+    "brand": {
+      "cyan": "#00B4FF",
+      "magenta": "#FF1F8F",
+      "yellow": "#FFC400",
+      "whatsapp": "#25D366"
+    },
+    "border": "#2A2A2A"
+  },
+  "typography": {
+    "headings": {
+      "fontFamily": "'Anton', sans-serif",
+      "weights": ["400"],
+      "usage": "H1, H2, Hero Text, Big numbers. Use uppercase and tracking-wider for intense print aesthetic."
+    },
+    "body": {
+      "fontFamily": "'Bricolage Grotesque', sans-serif",
+      "weights": ["400", "500", "700"],
+      "usage": "Paragraphs, UI Elements, Cards, Navigation, Product details."
+    },
+    "script_accent": {
+      "fontFamily": "'Italianno', cursive",
+      "weights": ["400"],
+      "usage": "Tagline 'Bring Your Ideas to Life', decorative script elements breaking the grid."
+    }
+  },
+  "layout_spacing": {
+    "philosophy": "Generous spacing, brutalist print-grid inspiration. High-contrast geometric blocks.",
+    "container_padding": "p-6 md:p-12 lg:p-24",
+    "grid_gap": "gap-8 md:gap-12",
+    "border_radius": "rounded-none or max rounded-sm (sharp print edge feel)"
+  },
+  "motion_interactions": {
+    "hover": "Magnetic button effect, sharp color swatch reveal on t-shirt card hover.",
+    "scroll": "Smooth scroll (lenis) with staggered fade-ins for product grid.",
+    "cursor": "Custom CMYK dot cursor or ink-drip cursor if possible.",
+    "buttons": "Hover states must contrast sharply (e.g. transparent with cyan border to solid cyan background)."
+  },
+  "components": {
+    "navigation": "Sticky glassmorphism header (bg-black/80 backdrop-blur-xl) with sharp bottom border (border-white/10). Desktop nav links visible. Mobile hamburger menu.",
+    "hero": "Dark background utilizing 'c1indlcw_aiel-banner.png'. Large typography block with 'Bring Your Ideas to Life' in Italianno script font + CMYK paint splatter background. Prominent CTA to catalog.",
+    "product_card": "Solid secondary background (#151515), sharp edges, 1px border. Image area on top. Hovering reveals color swatches. Price badge in CMYK accent.",
+    "product_detail": "Split bento layout. Left: Sticky product image with upload artwork preview zone. Right: Title, GSM/Fabric details, Size selector (S/M/L/XL/XXL) as sharp square toggle buttons, Quantity, Print area (Front/Back) selector, 'Add to Cart' and vibrant WhatsApp checkout button.",
+    "services_strip": "Marquee ticker using react-fast-marquee. Text: 'DTF Printing • Sublimation • Vinyl • Premium Quality • Fast Service'. Font: Anton, uppercase, tracking-widest, yellow or cyan text on dark background.",
+    "whatsapp_fab": "Floating action button in bottom right, fixed position, z-50. Vivid green (#25D366) to pop out. Opens wa.me/919150234277.",
+    "contact_footer": "Large typographic footer. Includes address (Puducherry), Email (aielenterprises3321@gmail.com), GST (34GIQPS9151C). Uses CMYK accents for dividers and links.",
+    "testing": "All interactive elements MUST have data-testid attributes (e.g. data-testid='add-to-cart-button', data-testid='whatsapp-checkout-button', data-testid='size-selector-M')."
+  },
+  "visual_enhancers": {
+    "textures": "Halftone dot textures (CSS radial gradient), paint splatter overlays using CMYK colors.",
+    "borders": "Registration-mark accents in corners (crop marks) for the print shop aesthetic. 1px solid sharp borders.",
+    "shadows": "Hard drop shadows instead of soft blurs (e.g., box-shadow: 4px 4px 0px #00B4FF)."
+  },
+  "media": {
+    "brand_assets": {
+      "nameboard": "https://customer-assets.emergentagent.com/job_b4501b93-3a10-4b2f-a3c7-52838db34c7b/artifacts/av4rfjdw_NameBoard.png",
+      "circular_logo": "https://customer-assets.emergentagent.com/job_b4501b93-3a10-4b2f-a3c7-52838db34c7b/artifacts/a9hyb92e_Circular%20logo.png",
+      "banner": "https://customer-assets.emergentagent.com/job_b4501b93-3a10-4b2f-a3c7-52838db34c7b/artifacts/c1indlcw_aiel-banner.png"
+    },
+    "products": {
+      "regular_round_neck": "https://images.unsplash.com/photo-1610502778270-c5c6f4c7d575?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHwyfHxibGFuayUyMHQtc2hpcnQlMjBtb2NrdXB8ZW58MHx8fHwxNzgxNzE5Mjc5fDA&ixlib=rb-4.1.0&q=85",
+      "oversized_tshirt": "https://images.unsplash.com/photo-1627225925683-1da7021732ea?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzd8MHwxfHNlYXJjaHwzfHxvdmVyc2l6ZWQlMjB0LXNoaXJ0JTIwbW9ja3VwfGVufDB8fHx8MTc4MTcxOTI3OXww&ixlib=rb-4.1.0&q=85",
+      "premium_polo": "https://images.unsplash.com/photo-1625910513413-c23b8bb81cba?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1ODR8MHwxfHNlYXJjaHwzfHxwb2xvJTIwc2hpcnR8ZW58MHx8fHwxNzgxNzE5Mjc5fDA&ixlib=rb-4.1.0&q=85",
+      "dry_fit_sports": "https://images.unsplash.com/photo-1620799139507-2a76f79a2f4d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHwzfHxibGFuayUyMHQtc2hpcnQlMjBtb2NrdXB8ZW58MHx8fHwxNzgxNzE5Mjc5fDA&ixlib=rb-4.1.0&q=85"
+    },
+    "background_textures": {
+      "cmyk_splash_1": "https://images.unsplash.com/photo-1580610448530-df1cb919b85a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzJ8MHwxfHNlYXJjaHwzfHxjeWFuJTIwbWFnZW50YSUyMHllbGxvdyUyMGluayUyMHNwbGFzaHxlbnwwfHx8fDE3ODE3MTkyNzl8MA&ixlib=rb-4.1.0&q=85",
+      "cmyk_splash_2": "https://images.unsplash.com/photo-1612742494452-d1c5aeef156d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzJ8MHwxfHNlYXJjaHw0fHxjeWFuJTIwbWFnZW50YSUyMHllbGxvdyUyMGluayUyMHNwbGFzaHxlbnwwfHx8fDE3ODE3MTkyNzl8MA&ixlib=rb-4.1.0&q=85"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Install required font libraries: '@fontsource/anton', '@fontsource/bricolage-grotesque', '@fontsource/italianno'.",
+    "Configure Tailwind with explicit CMYK hex codes provided in this JSON.",
+    "Implement product grid utilizing the provided Unsplash product images.",
+    "Install and use 'react-fast-marquee' for the services strip.",
+    "Ensure ALL buttons, forms, and interactive toggles have data-testid attributes (e.g., data-testid='whatsapp-checkout-btn').",
+    "Use pure HTML + Tailwind for marketing/hero pages. Avoid Shadcn for hero sections to allow custom overlapping.",
+    "Avoid standard border-radius (rounded-xl/lg) - keep things sharp (rounded-none) with 1px borders to mimic cut paper and print shop aesthetics.",
+    "Implement shopping cart context and WhatsApp checkout feature which formats the order text and opens wa.me/919150234277.",
+    "Include registration/crop marks (small L-shaped borders) in the corners of major sections or hero cards.",
+    "DO NOT use placeholder images (via.placeholder.com etc). Only use the URLs provided in this JSON.",
+    "Make the UI strictly Dark Mode. Avoid 'fintech dark' vibes; this is a rugged/vibrant print studio."
+  ]
+}
