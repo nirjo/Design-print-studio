@@ -1,9 +1,9 @@
 """Resend transactional email sender for Aiel Design & Printing Studio."""
 import asyncio
-import base64
 import logging
 import os
 from typing import Optional
+from urllib.parse import quote as _url_quote
 
 import resend
 
@@ -24,6 +24,9 @@ def _configured() -> bool:
 
 def _invoice_html(order: dict) -> str:
     short = order["id"][:6].upper()
+    total = float(order.get("total_amount", 0))
+    wa_msg = f"Hi Aiel! Got my order #{short} 🙏 thanks for the great prints!"
+    wa_link = "https://wa.me/919150234277?text=" + _url_quote(wa_msg)
     items_rows = ""
     for it in order.get("items", []):
         line = it["unit_price"] * it["quantity"]
@@ -35,7 +38,6 @@ def _invoice_html(order: dict) -> str:
             f"<td style='padding:8px;border-bottom:1px solid #eee;font-size:13px;text-align:right'>Rs. {line:.0f}</td>"
             "</tr>"
         )
-    total = float(order.get("total_amount", 0))
     return f"""
 <!doctype html><html><body style='font-family:Helvetica,Arial,sans-serif;background:#fafafa;margin:0;padding:24px'>
   <table width='100%' cellpadding='0' cellspacing='0' style='max-width:600px;margin:0 auto;background:white;border:1px solid #eee'>
@@ -55,7 +57,8 @@ def _invoice_html(order: dict) -> str:
     </tr>
     <tr><td style='padding:24px;font-size:14px;color:#222;line-height:1.5'>
       Hi <strong>{order.get('customer_name','')}</strong>,<br/><br/>
-      Great news — your order <strong>#{short}</strong> has shipped. The full GST invoice is attached as a PDF.<br/><br/>
+      Great news — your order <strong>#{short}</strong> has shipped 🚚<br/>
+      The full GST invoice is attached as a PDF.<br/><br/>
       Reply to this email or WhatsApp us at <strong>{SHOP_PHONE}</strong> if you need anything.
     </td></tr>
     <tr><td style='padding:0 24px 24px'>
@@ -71,6 +74,15 @@ def _invoice_html(order: dict) -> str:
           <td style='padding:14px;text-align:right;font-size:18px;font-weight:bold;color:#FF1F8F'>Rs. {total:.0f}</td>
         </tr></tfoot>
       </table>
+    </td></tr>
+    <tr><td align='center' style='padding:0 24px 28px'>
+      <table cellpadding='0' cellspacing='0'><tr><td bgcolor='#25D366' style='border-radius:999px'>
+        <a href='{wa_link}' target='_blank' rel='noopener'
+           style='display:inline-block;padding:14px 28px;font-size:14px;font-weight:bold;color:#0A0A0A;text-decoration:none;font-family:Helvetica,Arial,sans-serif;letter-spacing:0.5px'>
+          💬&nbsp;&nbsp;Say hi on WhatsApp →
+        </a>
+      </td></tr></table>
+      <div style='margin-top:10px;font-size:11px;color:#999'>Tap to send us a quick &quot;got my order&quot; — we&apos;d love to hear from you 💛</div>
     </td></tr>
     <tr><td style='padding:18px 24px;background:#fafafa;color:#888;font-size:11px;text-align:center;border-top:1px solid #eee'>
       {SHOP_NAME} · Puducherry · GSTIN 34GIQPS9151C<br/>

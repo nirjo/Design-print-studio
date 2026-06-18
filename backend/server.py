@@ -589,6 +589,8 @@ async def admin_update_order_status(order_id: str, body: OrderStatusUpdate, user
                             {"id": order_id},
                             {"$set": {"invoice_email_id": eid, "invoice_email_to": customer_email, "invoice_email_at": now_utc().isoformat()}},
                         )
+                        updated["invoice_email_id"] = eid
+                        updated["invoice_email_to"] = customer_email
             except Exception as e:
                 logger.exception("Invoice email failed: %s", e)
                 email_status = "error"
