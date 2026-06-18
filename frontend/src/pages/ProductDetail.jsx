@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import axios from "axios";
-import { ShoppingBag, MessageCircle, ArrowLeft } from "lucide-react";
+import { ShoppingBag, MessageCircle, ArrowLeft, Upload, X } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { buildWhatsAppLink } from "../lib/brand";
 import { toast, Toaster } from "sonner";
@@ -17,6 +17,8 @@ export default function ProductDetail() {
   const [qty, setQty] = useState(1);
   const [printArea, setPrintArea] = useState("Front");
   const [notes, setNotes] = useState("");
+  const [artwork, setArtwork] = useState(null); // { id, url, name }
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     axios.get(`${API}/products/${id}`).then((r) => {
@@ -31,6 +33,24 @@ export default function ProductDetail() {
   }
 
   const price = Math.round((product.price_min + product.price_max) / 2);
+  const artworkAbsolute = artwork ? `${process.env.REACT_APP_BACKEND_URL}${artwork.url}` : "";
+
+  const handleUpload = async (file) => {
+    if (!file) return;
+    if (file.size > 25 * 1024 * 1024) { toast.error("File too large (25 MB max)"); return; }
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("folder", "artwork");
+      const { data } = await axios.post(`${API}/upload`, fd);
+      setArtwork({ id: data.id, url: data.url, name: file.name });
+      toast.success("Artwork uploaded");
+    } catch (e) {
+      toast.error("Upload failed");
+    }
+    setUploading(false);
+  };
 
   const handleAdd = () => {
     addItem({
@@ -42,14 +62,27 @@ export default function ProductDetail() {
       quantity: qty,
       unit_price: price,
       notes,
+      artwork_url: artwork?.url || "",
     });
     toast.success(`${product.name} added to cart`, { description: `${color} · ${size} · ${printArea} × ${qty}` });
     setOpen(true);
   };
 
   const handleWhatsApp = () => {
-    const msg = `Hi! I'd like to order:\n\n*${product.name}*\nColor: ${color}\nSize: ${size}\nPrint: ${printArea}\nQty: ${qty}\nPrice: ₹${price * qty}\n${notes ? `Notes: ${notes}\n` : ""}\nPlease share confirmation & lead time.`;
-    window.open(buildWhatsAppLink(msg), "_blank");
+    const lines = [
+      `Hi! I'd like to order:`,
+      ``,
+      `*${product.name}*`,
+      `Color: ${color}`,
+      `Size: ${size}`,
+      `Print: ${printArea}`,
+      `Qty: ${qty}`,
+      `Price: ₹${price * qty}`,
+    ];
+    if (notes) lines.push(`Notes: ${notes}`);
+    if (artwork) lines.push(`Artwork: ${process.env.REACT_APP_BACKEND_URL}${artwork.url}`);
+    lines.push("", "Please share confirmation & lead time.");
+    window.open(buildWhatsAppLink(lines.join("\n")), "_blank");
   };
 
   return (
@@ -63,8 +96,13 @@ export default function ProductDetail() {
         <div className="grid lg:grid-cols-12 gap-10">
           <div className="lg:col-span-7">
             <div className="relative crop-marks border border-ink bg-ink-surface p-3 sticky top-24">
-              <div className="aspect-[4/5] overflow-hidden bg-black">
+              <div className="aspect-[4/5] overflow-hidden bg-black relative">
                 <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+                {artwork && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <img src={artworkAbsolute} alt="Your artwork" className="max-w-[45%] max-h-[40%] drop-shadow-2xl" />
+                  </div>
+                )}
               </div>
               <div className="absolute top-6 left-6 flex items-center gap-1">
                 <span className="w-3 h-3 bg-cmyk-cyan" />
@@ -87,7 +125,7 @@ export default function ProductDetail() {
               <span className="font-display text-4xl text-cmyk-cyan">₹{product.price_min}</span>
               <span className="text-white/40">–</span>
               <span className="font-display text-4xl text-cmyk-magenta">₹{product.price_max}</span>
-              <span className="text-xs text-white/45 ml-2">(per piece, varies by print area)</span>
+              <span className="text-xs text-white/45 ml-2">(per piece)</span>
             </div>
 
             <div className="mt-8">
@@ -110,12 +148,7 @@ export default function ProductDetail() {
               <div className="text-xs uppercase tracking-[0.2em] text-white/55 mb-3">Size</div>
               <div className="flex flex-wrap gap-2">
                 {product.sizes.map((s) => (
-                  <button
-                    key={s}
-                    data-testid={`size-${s}`}
-                    onClick={() => setSize(s)}
-                    className={`size-btn ${size === s ? "active" : ""}`}
-                  >
+                  <button key={s} data-testid={`size-${s}`} onClick={() => setSize(s)} className={`size-btn ${size === s ? "active" : ""}`}>
                     {s}
                   </button>
                 ))}
@@ -127,12 +160,8 @@ export default function ProductDetail() {
                 <div className="text-xs uppercase tracking-[0.2em] text-white/55 mb-3">Print Area</div>
                 <div className="flex gap-2">
                   {["Front", "Back", "Both"].map((pa) => (
-                    <button
-                      key={pa}
-                      data-testid={`print-area-${pa.toLowerCase()}`}
-                      onClick={() => setPrintArea(pa)}
-                      className={`flex-1 py-2 text-xs uppercase tracking-[0.18em] border ${printArea === pa ? "bg-cmyk-magenta text-white border-cmyk-magenta" : "border-ink hover:border-cmyk-cyan"}`}
-                    >
+                    <button key={pa} data-testid={`print-area-${pa.toLowerCase()}`} onClick={() => setPrintArea(pa)}
+                      className={`flex-1 py-2 text-xs uppercase tracking-[0.18em] border ${printArea === pa ? "bg-cmyk-magenta text-white border-cmyk-magenta" : "border-ink hover:border-cmyk-cyan"}`}>
                       {pa}
                     </button>
                   ))}
@@ -148,44 +177,47 @@ export default function ProductDetail() {
               </div>
             </div>
 
+            <div className="mt-8">
+              <div className="text-xs uppercase tracking-[0.2em] text-white/55 mb-3">Your Artwork <span className="text-white/35">(optional, up to 25 MB)</span></div>
+              {artwork ? (
+                <div className="flex items-center gap-3 border border-ink bg-ink-surface p-3">
+                  <img src={artworkAbsolute} alt="" className="w-14 h-14 object-cover bg-white" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm truncate">{artwork.name}</div>
+                    <div className="text-[11px] text-cmyk-cyan">Preview added to mockup</div>
+                  </div>
+                  <button data-testid="artwork-remove" onClick={() => setArtwork(null)} className="p-2 text-white/60 hover:text-cmyk-magenta"><X size={16} /></button>
+                </div>
+              ) : (
+                <label data-testid="artwork-upload-label" className="flex items-center justify-center gap-2 border-2 border-dashed border-ink hover:border-cmyk-cyan p-5 cursor-pointer">
+                  <Upload size={18} />
+                  <span className="text-sm uppercase tracking-wider">{uploading ? "Uploading…" : "Upload PNG / JPG / PDF"}</span>
+                  <input data-testid="artwork-input" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" className="hidden" onChange={(e) => handleUpload(e.target.files?.[0])} />
+                </label>
+              )}
+            </div>
+
             <div className="mt-6">
-              <div className="text-xs uppercase tracking-[0.2em] text-white/55 mb-3">Design / Notes</div>
+              <div className="text-xs uppercase tracking-[0.2em] text-white/55 mb-3">Design Notes</div>
               <textarea
                 data-testid="product-notes"
                 rows="3"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Describe your design or paste an Instagram/Drive link. We'll confirm artwork on WhatsApp."
+                placeholder="Position (chest / back / sleeve), colors, font, sizes, deadline…"
                 className="w-full bg-ink-surface border border-ink px-3 py-2 text-sm focus:border-cmyk-cyan outline-none resize-none"
               />
             </div>
 
             <div className="mt-8 flex flex-col sm:flex-row gap-3">
-              <button
-                data-testid="add-to-cart-btn"
-                onClick={handleAdd}
-                className="flex-1 bg-cmyk-yellow text-black font-bold py-4 uppercase tracking-wider text-sm flex items-center justify-center gap-2 hover:bg-white transition-colors"
-              >
+              <button data-testid="add-to-cart-btn" onClick={handleAdd}
+                className="flex-1 bg-cmyk-yellow text-black font-bold py-4 uppercase tracking-wider text-sm flex items-center justify-center gap-2 hover:bg-white transition-colors">
                 <ShoppingBag size={18} /> Add to Cart
               </button>
-              <button
-                data-testid="whatsapp-order-btn"
-                onClick={handleWhatsApp}
-                className="flex-1 bg-whatsapp text-black font-bold py-4 uppercase tracking-wider text-sm flex items-center justify-center gap-2 hover:bg-white transition-colors"
-              >
+              <button data-testid="whatsapp-order-btn" onClick={handleWhatsApp}
+                className="flex-1 bg-whatsapp text-black font-bold py-4 uppercase tracking-wider text-sm flex items-center justify-center gap-2 hover:bg-white transition-colors">
                 <MessageCircle size={18} /> Order on WhatsApp
               </button>
-            </div>
-
-            <div className="mt-8 border-t border-ink pt-6 grid grid-cols-2 gap-4 text-xs">
-              <div>
-                <div className="text-white/50 uppercase tracking-[0.2em] mb-1">Fabric</div>
-                <div className="text-white">{product.fabric}</div>
-              </div>
-              <div>
-                <div className="text-white/50 uppercase tracking-[0.2em] mb-1">Available Colors</div>
-                <div className="text-white">{product.colors.length}</div>
-              </div>
             </div>
           </div>
         </div>
