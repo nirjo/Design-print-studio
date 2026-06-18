@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { toast, Toaster } from "sonner";
-import { Plus, Trash2, Save, LogOut, Sparkles, Upload, X } from "lucide-react";
+import { Plus, Trash2, Save, LogOut, Sparkles, Upload, X, MessageCircle } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -89,7 +89,7 @@ export default function Admin() {
           {tab === "gallery" && (
             <GalleryTab items={gallery} onEdit={setGalleryEdit} onNew={() => setGalleryEdit({ id: "", category: "T-Shirts", title: "", image: "" })} onReload={reload} />
           )}
-          {tab === "orders" && <OrdersTab orders={orders} />}
+          {tab === "orders" && <OrdersTab orders={orders} onReload={reload} />}
           {tab === "contacts" && <ContactsTab contacts={contacts} />}
         </div>
       </div>
@@ -356,30 +356,134 @@ function GalleryEditor({ item, onClose, onSaved, isNew }) {
   );
 }
 
-function OrdersTab({ orders }) {
+function OrdersTab({ orders, onReload }) {
   return (
     <div data-testid="orders-list" className="space-y-3">
       {orders.length === 0 && <div className="text-white/45 text-sm">No orders yet.</div>}
       {orders.map((o) => (
-        <div key={o.id} className="border border-ink bg-ink-surface p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="font-display text-lg uppercase">{o.customer_name}</div>
-              <div className="text-xs text-white/60">{o.customer_phone} · {o.items?.length} items · ₹{o.total_amount}</div>
-            </div>
-            <div className="text-[10px] uppercase tracking-[0.2em] text-cmyk-yellow">{o.status} · {String(o.created_at).slice(0, 16)}</div>
-          </div>
-          <div className="mt-3 grid sm:grid-cols-2 gap-2">
-            {o.items?.map((it, i) => (
-              <div key={i} className="text-xs text-white/70 border border-ink p-2">
-                {it.product_name} · {it.color} / {it.size} / {it.print_area} × {it.quantity} = ₹{it.unit_price * it.quantity}
-                {it.artwork_url && <a className="block mt-1 text-cmyk-cyan break-all" href={`${process.env.REACT_APP_BACKEND_URL}${it.artwork_url}`} target="_blank" rel="noreferrer">Artwork ↗</a>}
-                {it.notes && <div className="mt-1 text-white/50">{it.notes}</div>}
-              </div>
-            ))}
-          </div>
-        </div>
+        <OrderRow key={o.id} order={o} onReload={onReload} />
       ))}
+    </div>
+  );
+}
+
+const STATUSES = [
+  { v: "pending", label: "Pending", color: "bg-white/15 text-white" },
+  { v: "in_print", label: "In Print", color: "bg-cmyk-cyan text-black" },
+  { v: "shipped", label: "Shipped", color: "bg-cmyk-magenta text-white" },
+  { v: "delivered", label: "Delivered", color: "bg-whatsapp text-black" },
+  { v: "cancelled", label: "Cancelled", color: "bg-white/10 text-white/60 line-through" },
+];
+
+const STATUS_TEMPLATES = {
+  pending: (o) => `Hi ${o.customer_name},\n\nThanks for your order with *Aiel Design & Printing Studio*! Your order #${o.id.slice(0, 6).toUpperCase()} for ₹${o.total_amount} is *received* and our team will confirm your artwork shortly.\n\n— Aiel Studio`,
+  in_print: (o) => `Hi ${o.customer_name},\n\nGreat news — your order #${o.id.slice(0, 6).toUpperCase()} with *Aiel Design & Printing Studio* is now *in production* 🖨️\n\nWe'll keep you posted as soon as it's ready to ship.\n\n— Aiel Studio`,
+  shipped: (o) => `Hi ${o.customer_name},\n\nYour order #${o.id.slice(0, 6).toUpperCase()} from *Aiel Design & Printing Studio* has been *shipped* 🚚\nTotal: ₹${o.total_amount}\n\nReply here if you have any questions.\n\n— Aiel Studio`,
+  delivered: (o) => `Hi ${o.customer_name},\n\nWe hope you're loving your prints from *Aiel Design & Printing Studio*! Your order #${o.id.slice(0, 6).toUpperCase()} has been marked as *delivered*.\n\nA quick photo / review would mean the world to us 💛\n\n— Aiel Studio`,
+  cancelled: (o) => `Hi ${o.customer_name},\n\nYour order #${o.id.slice(0, 6).toUpperCase()} with *Aiel Design & Printing Studio* has been *cancelled*. If this was a mistake or you'd like to re-order, just reply here.\n\n— Aiel Studio`,
+};
+
+function statusMeta(v) {
+  return STATUSES.find((s) => s.v === v) || STATUSES[0];
+}
+
+function customerWaLink(phone, message) {
+  const digits = (phone || "").replace(/[^0-9]/g, "");
+  if (!digits) return null;
+  // If user gave a 10-digit Indian number, prepend 91
+  const full = digits.length === 10 ? `91${digits}` : digits;
+  return `https://wa.me/${full}?text=${encodeURIComponent(message)}`;
+}
+
+function OrderRow({ order, onReload }) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  const meta = statusMeta(order.status || "pending");
+
+  const setStatus = async (next) => {
+    setBusy(true);
+    try {
+      await axios.patch(`${API}/admin/orders/${order.id}/status`, { status: next, note }, { withCredentials: true });
+      toast.success(`Status → ${next}`);
+      setNote("");
+      onReload();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Update failed");
+    }
+    setBusy(false);
+  };
+
+  const notify = () => {
+    const template = STATUS_TEMPLATES[order.status] || STATUS_TEMPLATES.pending;
+    const msg = template(order) + (note ? `\n\nNote: ${note}` : "");
+    const link = customerWaLink(order.customer_phone, msg);
+    if (!link) { toast.error("Customer phone missing"); return; }
+    window.open(link, "_blank");
+  };
+
+  return (
+    <div data-testid={`order-row-${order.id}`} className="border border-ink bg-ink-surface p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="font-display text-lg uppercase">{order.customer_name} <span className="text-white/40 text-xs ml-2">#{order.id.slice(0, 6).toUpperCase()}</span></div>
+          <div className="text-xs text-white/60">{order.customer_phone} · {order.items?.length} items · ₹{order.total_amount}</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={`px-2 py-1 text-[10px] uppercase tracking-[0.2em] font-bold ${meta.color}`}>{meta.label}</span>
+          <span className="text-[10px] uppercase tracking-[0.2em] text-white/50">{String(order.created_at).slice(0, 16)}</span>
+        </div>
+      </div>
+
+      <div className="mt-3 grid sm:grid-cols-2 gap-2">
+        {order.items?.map((it, i) => (
+          <div key={i} className="text-xs text-white/70 border border-ink p-2">
+            {it.product_name} · {it.color} / {it.size} / {it.print_area} × {it.quantity} = ₹{it.unit_price * it.quantity}
+            {it.artwork_url && <a className="block mt-1 text-cmyk-cyan break-all" href={`${process.env.REACT_APP_BACKEND_URL}${it.artwork_url}`} target="_blank" rel="noreferrer">Artwork ↗</a>}
+            {it.notes && <div className="mt-1 text-white/50">{it.notes}</div>}
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 border-t border-ink pt-3 flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap gap-1">
+          {STATUSES.map((s) => (
+            <button
+              key={s.v}
+              data-testid={`set-status-${order.id}-${s.v}`}
+              disabled={busy || order.status === s.v}
+              onClick={() => setStatus(s.v)}
+              className={`px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] border transition-colors ${order.status === s.v ? "border-cmyk-yellow text-cmyk-yellow" : "border-ink hover:border-cmyk-cyan text-white/70"}`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+        <input
+          data-testid={`status-note-${order.id}`}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Optional note (tracking #, ETA, etc.)"
+          className="flex-1 min-w-[180px] bg-ink-black border border-ink px-2 py-1.5 text-xs"
+        />
+        <button
+          data-testid={`notify-customer-${order.id}`}
+          onClick={notify}
+          className="bg-whatsapp text-black font-bold px-3 py-1.5 text-[11px] uppercase tracking-wider inline-flex items-center gap-1 hover:bg-white"
+        >
+          <MessageCircle size={12} /> Notify
+        </button>
+      </div>
+
+      {Array.isArray(order.status_history) && order.status_history.length > 0 && (
+        <details className="mt-3 text-xs">
+          <summary className="cursor-pointer text-white/55 uppercase tracking-wider">History ({order.status_history.length})</summary>
+          <ul className="mt-2 space-y-1 text-white/65">
+            {order.status_history.map((h, i) => (
+              <li key={i}>· <span className="text-cmyk-yellow">{h.status}</span> by {h.by} · {String(h.at).slice(0, 16)}{h.note ? ` — ${h.note}` : ""}</li>
+            ))}
+          </ul>
+        </details>
+      )}
     </div>
   );
 }

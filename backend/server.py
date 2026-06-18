@@ -485,10 +485,41 @@ async def admin_delete_gallery(item_id: str):
     return {"ok": True}
 
 
+ALLOWED_STATUSES = ["pending", "in_print", "shipped", "delivered", "cancelled"]
+
+
+class OrderStatusUpdate(BaseModel):
+    status: str
+    note: Optional[str] = ""
+
+
 @admin.get("/orders")
 async def admin_orders():
     rows = await db.orders.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
     return rows
+
+
+@admin.patch("/orders/{order_id}/status")
+async def admin_update_order_status(order_id: str, body: OrderStatusUpdate, user: User = Depends(require_admin)):
+    if body.status not in ALLOWED_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Allowed: {ALLOWED_STATUSES}")
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    entry = {
+        "status": body.status,
+        "note": body.note or "",
+        "by": user.email,
+        "at": now_utc().isoformat(),
+    }
+    history = order.get("status_history", [])
+    history.append(entry)
+    await db.orders.update_one(
+        {"id": order_id},
+        {"$set": {"status": body.status, "status_history": history, "updated_at": now_utc().isoformat()}},
+    )
+    updated = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    return updated
 
 
 @admin.get("/contacts")
