@@ -12,8 +12,9 @@ export default function CartDrawer() {
 
   const submitOrder = async () => {
     if (items.length === 0) return;
+    let trackingId = "";
     try {
-      await axios.post(`${API}/orders`, {
+      const { data } = await axios.post(`${API}/orders`, {
         customer_name: customer.name || "Guest",
         customer_phone: customer.phone || "Not provided",
         delivery_address: customer.address || "",
@@ -21,10 +22,11 @@ export default function CartDrawer() {
         total_amount: totals.amount,
         channel: "whatsapp",
       });
+      trackingId = (data?.id || "").slice(0, 6).toUpperCase();
     } catch (e) {
       console.warn("Order save failed", e?.message);
     }
-    const msg = formatCartMessage(items, customer);
+    const msg = formatCartMessage(items, customer, trackingId);
     window.open(buildWhatsAppLink(msg), "_blank");
   };
 

@@ -415,7 +415,8 @@ function OrderRow({ order, onReload }) {
 
   const notify = () => {
     const template = STATUS_TEMPLATES[order.status] || STATUS_TEMPLATES.pending;
-    const msg = template(order) + (note ? `\n\nNote: ${note}` : "");
+    const trackUrl = `${window.location.origin}/track?id=${order.id.slice(0, 6).toUpperCase()}`;
+    const msg = template(order) + (note ? `\n\nNote: ${note}` : "") + `\n\nTrack live → ${trackUrl}`;
     const link = customerWaLink(order.customer_phone, msg);
     if (!link) { toast.error("Customer phone missing"); return; }
     window.open(link, "_blank");

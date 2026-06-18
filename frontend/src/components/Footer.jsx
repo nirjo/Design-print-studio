@@ -28,6 +28,7 @@ export default function Footer() {
               <li><Link to="/shop" className="hover:text-cmyk-cyan">All Products</Link></li>
               <li><Link to="/catalogue" className="hover:text-cmyk-cyan">Catalogue</Link></li>
               <li><Link to="/gallery" className="hover:text-cmyk-cyan">Gallery</Link></li>
+              <li><Link to="/track" className="hover:text-cmyk-cyan">Track Order</Link></li>
               <li><Link to="/contact" className="hover:text-cmyk-cyan">Bulk Quote</Link></li>
             </ul>
           </div>

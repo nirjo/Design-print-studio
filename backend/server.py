@@ -382,6 +382,53 @@ async def create_order(payload: OrderCreate):
     return order
 
 
+class TrackRequest(BaseModel):
+    order_id: str
+    phone: str
+
+
+def _normalize_phone(p: str) -> str:
+    return "".join(ch for ch in (p or "") if ch.isdigit())[-10:]
+
+
+@api_router.post("/orders/track")
+async def track_order(req: TrackRequest):
+    raw_id = (req.order_id or "").strip()
+    if not raw_id:
+        raise HTTPException(status_code=400, detail="Order ID required")
+    norm_phone = _normalize_phone(req.phone)
+    if len(norm_phone) < 10:
+        raise HTTPException(status_code=400, detail="Phone must be 10 digits")
+
+    # Match either full UUID id OR a 6+ char prefix of the id (case-insensitive)
+    candidates = []
+    full = await db.orders.find_one({"id": raw_id}, {"_id": 0})
+    if full:
+        candidates.append(full)
+    else:
+        prefix = raw_id.lower()
+        async for doc in db.orders.find({"id": {"$regex": f"^{prefix}", "$options": "i"}}, {"_id": 0}).limit(5):
+            candidates.append(doc)
+
+    for o in candidates:
+        if _normalize_phone(o.get("customer_phone", "")) == norm_phone:
+            # Return a public-safe view (no internal fields beyond what we already store)
+            return {
+                "id": o["id"],
+                "short_id": o["id"][:6].upper(),
+                "customer_name": o.get("customer_name"),
+                "customer_phone": o.get("customer_phone"),
+                "items": o.get("items", []),
+                "total_amount": o.get("total_amount", 0),
+                "status": o.get("status", "pending"),
+                "status_history": o.get("status_history", []),
+                "created_at": o.get("created_at"),
+                "updated_at": o.get("updated_at"),
+            }
+
+    raise HTTPException(status_code=404, detail="Order not found. Check your ID and phone.")
+
+
 @api_router.post("/contact", response_model=Contact)
 async def create_contact(payload: ContactCreate):
     c = Contact(**payload.model_dump())

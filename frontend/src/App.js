@@ -18,6 +18,7 @@ import Contact from "./pages/Contact";
 import Login from "./pages/Login";
 import AuthCallback from "./pages/AuthCallback";
 import Admin from "./pages/Admin";
+import Track from "./pages/Track";
 
 function AppRouter() {
   const location = useLocation();
@@ -33,6 +34,7 @@ function AppRouter() {
       <Route path="/gallery" element={<Gallery />} />
       <Route path="/catalogue" element={<Catalogue />} />
       <Route path="/contact" element={<Contact />} />
+      <Route path="/track" element={<Track />} />
       <Route path="/login" element={<Login />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />

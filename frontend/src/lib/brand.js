@@ -17,9 +17,10 @@ export function buildWhatsAppLink(message) {
   return `https://wa.me/${BRAND.phoneRaw}?text=${encodeURIComponent(message)}`;
 }
 
-export function formatCartMessage(items, customer = {}) {
+export function formatCartMessage(items, customer = {}, trackingId = "") {
   const lines = [];
   lines.push(`*New Order — ${BRAND.name}*`);
+  if (trackingId) lines.push(`Tracking ID: *${trackingId}*`);
   lines.push("");
   if (customer.name) lines.push(`Name: ${customer.name}`);
   if (customer.phone) lines.push(`Phone: ${customer.phone}`);
@@ -35,6 +36,10 @@ export function formatCartMessage(items, customer = {}) {
   });
   lines.push("");
   lines.push(`*Total: ₹${total}*`);
+  if (trackingId) {
+    lines.push("");
+    lines.push(`Track your order anytime → ${typeof window !== "undefined" ? window.location.origin : ""}/track?id=${trackingId}`);
+  }
   lines.push("");
   lines.push("Please confirm availability and lead time. Thanks!");
   return lines.join("\n");
