@@ -623,6 +623,98 @@ async def admin_generate_mockup(req: GenerateMockupReq):
 
 
 api_router.include_router(admin)
+
+
+# ----------- INVOICE -----------
+def _phone_matches(order: dict, phone: str) -> bool:
+    return _normalize_phone(order.get("customer_phone", "")) == _normalize_phone(phone or "")
+
+
+async def _find_order(order_id: str):
+    o = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if o:
+        return o
+    async for doc in db.orders.find({"id": {"$regex": f"^{order_id.lower()}", "$options": "i"}}, {"_id": 0}).limit(1):
+        return doc
+    return None
+
+
+@api_router.get("/orders/{order_id}/invoice.pdf")
+async def public_invoice(order_id: str, phone: str = Query(...)):
+    o = await _find_order(order_id)
+    if not o or not _phone_matches(o, phone):
+        raise HTTPException(status_code=404, detail="Order not found")
+    from invoice import generate_invoice_pdf
+    pdf = generate_invoice_pdf(o)
+    short = o["id"][:6].upper()
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=Aiel-Invoice-{short}.pdf"},
+    )
+
+
+# Admin-only invoice + reviews list (registered directly on api_router with require_admin dep)
+@api_router.get("/admin/orders/{order_id}/invoice.pdf", dependencies=[Depends(require_admin)])
+async def admin_invoice(order_id: str):
+    o = await _find_order(order_id)
+    if not o:
+        raise HTTPException(status_code=404, detail="Order not found")
+    from invoice import generate_invoice_pdf
+    pdf = generate_invoice_pdf(o)
+    short = o["id"][:6].upper()
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=Aiel-Invoice-{short}.pdf"},
+    )
+
+
+@api_router.get("/admin/reviews", dependencies=[Depends(require_admin)])
+async def admin_reviews():
+    rows = await db.reviews.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return rows
+
+
+# ----------- REVIEWS (PUBLIC) -----------
+class ReviewCreate(BaseModel):
+    order_id: str
+    phone: str
+    rating: int = Field(ge=1, le=5)
+    text: str = ""
+    photo_url: Optional[str] = ""
+    allow_showcase: bool = True
+
+
+@api_router.post("/reviews")
+async def submit_review(payload: ReviewCreate):
+    o = await _find_order(payload.order_id)
+    if not o or not _phone_matches(o, payload.phone):
+        raise HTTPException(status_code=404, detail="Order not found")
+    rec = {
+        "id": f"rev_{uuid.uuid4().hex[:10]}",
+        "order_id": o["id"],
+        "short_id": o["id"][:6].upper(),
+        "customer_name": o.get("customer_name", ""),
+        "rating": payload.rating,
+        "text": payload.text.strip(),
+        "photo_url": payload.photo_url or "",
+        "allow_showcase": payload.allow_showcase,
+        "created_at": now_utc().isoformat(),
+    }
+    await db.reviews.insert_one(rec)
+    return {"ok": True, "id": rec["id"]}
+
+
+@api_router.get("/reviews/public")
+async def public_reviews(limit: int = 20):
+    rows = await db.reviews.find(
+        {"allow_showcase": True, "rating": {"$gte": 4}},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(limit)
+    return rows
+
+
 app.include_router(api_router)
 
 app.add_middleware(

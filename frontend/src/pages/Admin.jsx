@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { toast, Toaster } from "sonner";
-import { Plus, Trash2, Save, LogOut, Sparkles, Upload, X, MessageCircle } from "lucide-react";
+import { Plus, Trash2, Save, LogOut, Sparkles, Upload, X, MessageCircle, FileText, Star } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
-const TABS = ["products", "gallery", "orders", "contacts"];
+const TABS = ["products", "gallery", "orders", "contacts", "reviews"];
 
 const EMPTY_PRODUCT = {
   id: "",
@@ -31,20 +31,23 @@ export default function Admin() {
   const [gallery, setGallery] = useState([]);
   const [orders, setOrders] = useState([]);
   const [contacts, setContacts] = useState([]);
+  const [reviews, setReviews] = useState([]);
   const [editing, setEditing] = useState(null);
   const [galleryEdit, setGalleryEdit] = useState(null);
 
   const reload = async () => {
-    const [p, g, o, c] = await Promise.allSettled([
+    const [p, g, o, c, r] = await Promise.allSettled([
       axios.get(`${API}/products`),
       axios.get(`${API}/gallery`),
       axios.get(`${API}/admin/orders`, { withCredentials: true }),
       axios.get(`${API}/admin/contacts`, { withCredentials: true }),
+      axios.get(`${API}/admin/reviews`, { withCredentials: true }),
     ]);
     if (p.status === "fulfilled") setProducts(p.value.data);
     if (g.status === "fulfilled") setGallery(g.value.data);
     if (o.status === "fulfilled") setOrders(o.value.data);
     if (c.status === "fulfilled") setContacts(c.value.data);
+    if (r.status === "fulfilled") setReviews(r.value.data);
   };
 
   useEffect(() => { reload(); }, []);
@@ -72,7 +75,7 @@ export default function Admin() {
               onClick={() => setTab(t)}
               className={`px-4 py-3 text-xs uppercase tracking-[0.22em] ${tab === t ? "text-cmyk-yellow border-b-2 border-cmyk-yellow" : "text-white/55 hover:text-white"}`}
             >
-              {t} {t === "products" ? `(${products.length})` : t === "gallery" ? `(${gallery.length})` : t === "orders" ? `(${orders.length})` : `(${contacts.length})`}
+              {t} {t === "products" ? `(${products.length})` : t === "gallery" ? `(${gallery.length})` : t === "orders" ? `(${orders.length})` : t === "contacts" ? `(${contacts.length})` : `(${reviews.length})`}
             </button>
           ))}
         </div>
@@ -91,6 +94,7 @@ export default function Admin() {
           )}
           {tab === "orders" && <OrdersTab orders={orders} onReload={reload} />}
           {tab === "contacts" && <ContactsTab contacts={contacts} />}
+          {tab === "reviews" && <ReviewsTab reviews={reviews} />}
         </div>
       </div>
 
@@ -378,8 +382,18 @@ const STATUSES = [
 const STATUS_TEMPLATES = {
   pending: (o) => `Hi ${o.customer_name},\n\nThanks for your order with *Aiel Design & Printing Studio*! Your order #${o.id.slice(0, 6).toUpperCase()} for ₹${o.total_amount} is *received* and our team will confirm your artwork shortly.\n\n— Aiel Studio`,
   in_print: (o) => `Hi ${o.customer_name},\n\nGreat news — your order #${o.id.slice(0, 6).toUpperCase()} with *Aiel Design & Printing Studio* is now *in production* 🖨️\n\nWe'll keep you posted as soon as it's ready to ship.\n\n— Aiel Studio`,
-  shipped: (o) => `Hi ${o.customer_name},\n\nYour order #${o.id.slice(0, 6).toUpperCase()} from *Aiel Design & Printing Studio* has been *shipped* 🚚\nTotal: ₹${o.total_amount}\n\nReply here if you have any questions.\n\n— Aiel Studio`,
-  delivered: (o) => `Hi ${o.customer_name},\n\nWe hope you're loving your prints from *Aiel Design & Printing Studio*! Your order #${o.id.slice(0, 6).toUpperCase()} has been marked as *delivered*.\n\nA quick photo / review would mean the world to us 💛\n\n— Aiel Studio`,
+  shipped: (o) => {
+    const short = o.id.slice(0, 6).toUpperCase();
+    const phoneDigits = (o.customer_phone || "").replace(/[^0-9]/g, "").slice(-10);
+    const invoice = `${window.location.origin}/api/orders/${short}/invoice.pdf?phone=${phoneDigits}`;
+    return `Hi ${o.customer_name},\n\nYour order #${short} from *Aiel Design & Printing Studio* has been *shipped* 🚚\nTotal: ₹${o.total_amount}\n\n📄 Invoice: ${invoice}\n\nReply here if you have any questions.\n\n— Aiel Studio`;
+  },
+  delivered: (o) => {
+    const short = o.id.slice(0, 6).toUpperCase();
+    const phoneDigits = (o.customer_phone || "").replace(/[^0-9]/g, "").slice(-10);
+    const reviewLink = `${window.location.origin}/review?id=${short}&phone=${phoneDigits}`;
+    return `Hi ${o.customer_name},\n\nWe hope you're loving your prints from *Aiel Design & Printing Studio*! Your order #${short} has been marked as *delivered*. 🎉\n\n💛 We'd be honoured if you'd share a quick review + a wearing-it photo here:\n${reviewLink}\n\nThanks for choosing Aiel!\n\n— Aiel Studio`;
+  },
   cancelled: (o) => `Hi ${o.customer_name},\n\nYour order #${o.id.slice(0, 6).toUpperCase()} with *Aiel Design & Printing Studio* has been *cancelled*. If this was a mistake or you'd like to re-order, just reply here.\n\n— Aiel Studio`,
 };
 
@@ -473,6 +487,15 @@ function OrderRow({ order, onReload }) {
         >
           <MessageCircle size={12} /> Notify
         </button>
+        <a
+          data-testid={`invoice-${order.id}`}
+          href={`${process.env.REACT_APP_BACKEND_URL}/api/admin/orders/${order.id}/invoice.pdf`}
+          target="_blank"
+          rel="noreferrer"
+          className="border border-ink hover:border-cmyk-yellow text-cmyk-yellow px-3 py-1.5 text-[11px] uppercase tracking-wider inline-flex items-center gap-1"
+        >
+          <FileText size={12} /> Invoice
+        </a>
       </div>
 
       {Array.isArray(order.status_history) && order.status_history.length > 0 && (
@@ -503,6 +526,35 @@ function ContactsTab({ contacts }) {
             <div className="text-[10px] uppercase tracking-[0.2em] text-white/50">{String(c.created_at).slice(0, 16)}</div>
           </div>
           <p className="text-sm text-white/75 mt-2">{c.message}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ReviewsTab({ reviews }) {
+  return (
+    <div data-testid="reviews-list" className="space-y-3">
+      {reviews.length === 0 && <div className="text-white/45 text-sm">No reviews yet.</div>}
+      {reviews.map((r) => (
+        <div key={r.id} className="border border-ink bg-ink-surface p-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <div className="font-display text-lg uppercase">{r.customer_name} <span className="text-white/40 text-xs ml-2">#{r.short_id}</span></div>
+              <div className="flex gap-1 mt-1">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <Star key={n} size={14} className={n <= r.rating ? "text-cmyk-yellow" : "text-white/20"} fill={n <= r.rating ? "currentColor" : "none"} />
+                ))}
+              </div>
+            </div>
+            <div className="text-[10px] uppercase tracking-[0.2em] text-white/50">{String(r.created_at).slice(0, 16)}{r.allow_showcase ? " · showcase ✓" : ""}</div>
+          </div>
+          {r.text && <p className="text-sm text-white/75 mt-2">{r.text}</p>}
+          {r.photo_url && (
+            <a href={`${process.env.REACT_APP_BACKEND_URL}${r.photo_url}`} target="_blank" rel="noreferrer">
+              <img src={`${process.env.REACT_APP_BACKEND_URL}${r.photo_url}`} alt="" className="mt-3 max-h-48 border border-ink" />
+            </a>
+          )}
         </div>
       ))}
     </div>

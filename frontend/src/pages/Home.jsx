@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
-import { ArrowRight, Sparkles, Zap, Shield, Truck } from "lucide-react";
+import { ArrowRight, Sparkles, Zap, Shield, Truck, Star } from "lucide-react";
 import ProductCard from "../components/ProductCard";
 import ServicesMarquee from "../components/ServicesMarquee";
 import { BRAND } from "../lib/brand";
@@ -10,9 +10,11 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 export default function Home() {
   const [products, setProducts] = useState([]);
+  const [reviews, setReviews] = useState([]);
 
   useEffect(() => {
     axios.get(`${API}/products`).then((r) => setProducts(r.data)).catch(() => {});
+    axios.get(`${API}/reviews/public?limit=6`).then((r) => setReviews(r.data)).catch(() => {});
   }, []);
 
   return (
@@ -131,7 +133,7 @@ export default function Home() {
               </h3>
             </div>
             <div className="md:text-right">
-              <p className="text-white/65 mb-6">Send us your artwork & quantity — we'll quote within an hour on WhatsApp.</p>
+              <p className="text-white/65 mb-6">Send us your artwork &amp; quantity — we&apos;ll quote within an hour on WhatsApp.</p>
               <Link to="/contact" data-testid="bulk-quote-btn" className="inline-flex items-center gap-2 bg-cmyk-cyan text-black px-6 py-3 font-bold uppercase tracking-wider text-sm hover:bg-white">
                 Get a Bulk Quote <ArrowRight size={18} />
               </Link>
@@ -139,6 +141,34 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* REVIEWS */}
+      {reviews.length > 0 && (
+        <section data-testid="reviews-section" className="max-w-7xl mx-auto px-5 md:px-10 py-16">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+            <div>
+              <div className="text-xs uppercase tracking-[0.3em] text-cmyk-yellow mb-3">/ Real customers</div>
+              <h2 className="font-display text-5xl md:text-7xl uppercase leading-[0.9]">Worn & <span className="text-cmyk-cyan">loved</span>.</h2>
+            </div>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {reviews.map((r) => (
+              <div key={r.id} data-testid={`review-card-${r.id}`} className="border border-ink bg-ink-surface p-5 fade-up">
+                <div className="flex items-center gap-1 mb-2">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <Star key={n} size={14} className={n <= r.rating ? "text-cmyk-yellow" : "text-white/15"} fill={n <= r.rating ? "currentColor" : "none"} />
+                  ))}
+                </div>
+                {r.photo_url && (
+                  <img src={`${process.env.REACT_APP_BACKEND_URL}${r.photo_url}`} alt="" className="w-full h-48 object-cover mb-3 border border-ink" />
+                )}
+                {r.text && <p className="text-sm text-white/80 leading-relaxed">&ldquo;{r.text}&rdquo;</p>}
+                <div className="mt-3 text-[11px] uppercase tracking-[0.2em] text-white/45">— {r.customer_name || "Customer"}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
