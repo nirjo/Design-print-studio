@@ -15,13 +15,30 @@ T-shirt printing shop website for "Aiel Design&Printing Studio" with 4 product l
 
 ## Tasks Done (2026-02)
 - ✅ Public site: hero, shop, product detail, gallery, catalogue, contact, WhatsApp FAB
-- ✅ Cart with WhatsApp checkout, MongoDB persistence
-- ✅ Customer artwork upload (up to 25 MB) via Emergent Object Storage — artwork URL attached to cart line and WhatsApp order message
-- ✅ Real Aiel-branded product mockups generated via Gemini Nano Banana for all 4 SKUs (replacing Unsplash placeholders)
-- ✅ Admin dashboard: Products CRUD, Gallery CRUD, Orders viewer, Contacts viewer
-- ✅ Admin one-click AI mockup generation in product editor (Nano Banana)
-- ✅ Emergent Google OAuth + ProtectedRoute + RBAC (is_admin gated by ADMIN_EMAIL)
-- ✅ Tested: iteration_1 (10/10 frontend, 8/8 backend) + iteration_2 (4/4 frontend, 23/23 backend)
+- ✅ Cart with WhatsApp checkout, MongoDB persistence, customer email field
+- ✅ Customer artwork upload (25 MB) via Emergent Object Storage
+- ✅ Real Aiel-branded product mockups generated via Gemini Nano Banana
+- ✅ Admin dashboard: Products CRUD, Gallery CRUD, Orders viewer, Contacts viewer, Reviews viewer
+- ✅ Admin one-click AI mockup generation
+- ✅ Emergent Google OAuth + ProtectedRoute + RBAC
+- ✅ Order status workflow (pending → in_print → shipped → delivered + cancelled) with one-click WhatsApp notify + history
+- ✅ Customer order tracking page with stage timeline + history
+- ✅ Auto-generated PDF invoice (reportlab) with phone-gated public link
+- ✅ Customer review collection (5★ + photo + showcase opt-in) auto-promoted to Home reviews section
+- ✅ Auto-email PDF invoice on `shipped` status (Resend); manual "Email" button in admin
+- ✅ Tested across iterations 1 + 2
+
+## Backlog
+- **P1** Multi-admin support
+- **P1** Razorpay / Stripe for INR online payments
+- **P2** Resend API key wiring (currently env var is empty — system gracefully skips emails until user adds the key)
+- **P2** Server-generated PDF for downloadable catalogue
+- **P2** SEO / OG meta tags, sitemap
+
+## Next Actions
+1. Ask user to paste their `RESEND_API_KEY` so the email send actually fires (currently the system reports `email_status: not_configured`)
+2. Multi-admin support
+3. Razorpay for INR online payments
 
 ## User Personas
 - Retail customer (browse + WhatsApp order)

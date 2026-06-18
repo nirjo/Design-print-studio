@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { toast, Toaster } from "sonner";
-import { Plus, Trash2, Save, LogOut, Sparkles, Upload, X, MessageCircle, FileText, Star } from "lucide-react";
+import { Plus, Trash2, Save, LogOut, Sparkles, Upload, X, MessageCircle, FileText, Star, Mail } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -441,7 +441,10 @@ function OrderRow({ order, onReload }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="font-display text-lg uppercase">{order.customer_name} <span className="text-white/40 text-xs ml-2">#{order.id.slice(0, 6).toUpperCase()}</span></div>
-          <div className="text-xs text-white/60">{order.customer_phone} · {order.items?.length} items · ₹{order.total_amount}</div>
+          <div className="text-xs text-white/60">{order.customer_phone}{order.customer_email ? ` · ${order.customer_email}` : ""} · {order.items?.length} items · ₹{order.total_amount}</div>
+          {order.invoice_email_id && (
+            <div className="text-[10px] uppercase tracking-[0.2em] text-cmyk-cyan mt-1">📧 invoice sent {String(order.invoice_email_at).slice(0, 16)} → {order.invoice_email_to}</div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <span className={`px-2 py-1 text-[10px] uppercase tracking-[0.2em] font-bold ${meta.color}`}>{meta.label}</span>
@@ -496,6 +499,23 @@ function OrderRow({ order, onReload }) {
         >
           <FileText size={12} /> Invoice
         </a>
+        <button
+          data-testid={`email-invoice-${order.id}`}
+          onClick={async () => {
+            const to = window.prompt(`Email invoice to:`, order.customer_email || "");
+            if (!to) return;
+            try {
+              await axios.post(`${API}/admin/orders/${order.id}/email-invoice`, { to }, { withCredentials: true });
+              toast.success(`Invoice emailed to ${to}`);
+              onReload();
+            } catch (e) {
+              toast.error(e?.response?.data?.detail || "Email failed");
+            }
+          }}
+          className="border border-ink hover:border-cmyk-cyan text-cmyk-cyan px-3 py-1.5 text-[11px] uppercase tracking-wider inline-flex items-center gap-1"
+        >
+          <Mail size={12} /> Email
+        </button>
       </div>
 
       {Array.isArray(order.status_history) && order.status_history.length > 0 && (

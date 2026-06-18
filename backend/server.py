@@ -553,6 +553,7 @@ async def admin_update_order_status(order_id: str, body: OrderStatusUpdate, user
     order = await db.orders.find_one({"id": order_id}, {"_id": 0})
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+    prev_status = order.get("status", "pending")
     entry = {
         "status": body.status,
         "note": body.note or "",
@@ -566,6 +567,32 @@ async def admin_update_order_status(order_id: str, body: OrderStatusUpdate, user
         {"$set": {"status": body.status, "status_history": history, "updated_at": now_utc().isoformat()}},
     )
     updated = await db.orders.find_one({"id": order_id}, {"_id": 0})
+
+    # Auto-send invoice email on shipped transition
+    email_status = "skipped"
+    if body.status == "shipped" and prev_status != "shipped":
+        customer_email = (updated.get("customer_email") or "").strip()
+        if not customer_email:
+            email_status = "no_email"
+        else:
+            try:
+                from invoice import generate_invoice_pdf
+                from email_sender import send_shipping_email, _configured
+                if not _configured():
+                    email_status = "not_configured"
+                else:
+                    pdf_bytes = generate_invoice_pdf(updated)
+                    eid = await send_shipping_email(customer_email, updated, pdf_bytes)
+                    email_status = "sent" if eid else "failed"
+                    if eid:
+                        await db.orders.update_one(
+                            {"id": order_id},
+                            {"$set": {"invoice_email_id": eid, "invoice_email_to": customer_email, "invoice_email_at": now_utc().isoformat()}},
+                        )
+            except Exception as e:
+                logger.exception("Invoice email failed: %s", e)
+                email_status = "error"
+    updated["email_status"] = email_status
     return updated
 
 
@@ -674,6 +701,33 @@ async def admin_invoice(order_id: str):
 async def admin_reviews():
     rows = await db.reviews.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
     return rows
+
+
+class ManualEmailRequest(BaseModel):
+    to: Optional[str] = ""  # override; otherwise uses order.customer_email
+
+
+@api_router.post("/admin/orders/{order_id}/email-invoice", dependencies=[Depends(require_admin)])
+async def admin_email_invoice(order_id: str, body: ManualEmailRequest):
+    o = await _find_order(order_id)
+    if not o:
+        raise HTTPException(status_code=404, detail="Order not found")
+    target = (body.to or o.get("customer_email") or "").strip()
+    if not target:
+        raise HTTPException(status_code=400, detail="No recipient email. Provide 'to' or save customer_email on the order.")
+    from invoice import generate_invoice_pdf
+    from email_sender import send_shipping_email, _configured
+    if not _configured():
+        raise HTTPException(status_code=503, detail="Email not configured. Set RESEND_API_KEY in backend/.env")
+    pdf_bytes = generate_invoice_pdf(o)
+    eid = await send_shipping_email(target, o, pdf_bytes)
+    if not eid:
+        raise HTTPException(status_code=502, detail="Email send failed")
+    await db.orders.update_one(
+        {"id": o["id"]},
+        {"$set": {"invoice_email_id": eid, "invoice_email_to": target, "invoice_email_at": now_utc().isoformat()}},
+    )
+    return {"ok": True, "id": eid, "to": target}
 
 
 # ----------- REVIEWS (PUBLIC) -----------

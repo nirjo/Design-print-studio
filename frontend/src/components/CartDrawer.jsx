@@ -8,7 +8,7 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 export default function CartDrawer() {
   const { items, totals, open, setOpen, updateItem, removeItem, clear } = useCart();
-  const [customer, setCustomer] = useState({ name: "", phone: "", address: "" });
+  const [customer, setCustomer] = useState({ name: "", phone: "", email: "", address: "" });
 
   const submitOrder = async () => {
     if (items.length === 0) return;
@@ -17,6 +17,7 @@ export default function CartDrawer() {
       const { data } = await axios.post(`${API}/orders`, {
         customer_name: customer.name || "Guest",
         customer_phone: customer.phone || "Not provided",
+        customer_email: customer.email || "",
         delivery_address: customer.address || "",
         items: items.map(({ key, ...rest }) => rest),
         total_amount: totals.amount,
@@ -49,7 +50,7 @@ export default function CartDrawer() {
           {items.length === 0 && (
             <div className="text-center py-16 text-white/50">
               <div className="font-display text-3xl text-white/40 mb-2">EMPTY</div>
-              <p className="text-sm">Add a tee, polo or dry-fit and we'll print it.</p>
+              <p className="text-sm">Add a tee, polo or dry-fit and we&apos;ll print it.</p>
             </div>
           )}
           {items.map((it) => (
@@ -86,6 +87,14 @@ export default function CartDrawer() {
               className="bg-ink-surface border border-ink px-3 py-2 text-sm focus:border-cmyk-cyan outline-none"
             />
           </div>
+          <input
+            data-testid="cart-customer-email"
+            type="email"
+            value={customer.email}
+            onChange={(e) => setCustomer({ ...customer, email: e.target.value })}
+            placeholder="Email (optional — receive invoice PDF)"
+            className="w-full bg-ink-surface border border-ink px-3 py-2 text-sm focus:border-cmyk-cyan outline-none"
+          />
           <div className="flex items-center justify-between">
             <span className="text-xs uppercase tracking-[0.2em] text-white/50">Total</span>
             <span data-testid="cart-total" className="font-display text-3xl text-cmyk-yellow">₹{totals.amount}</span>
