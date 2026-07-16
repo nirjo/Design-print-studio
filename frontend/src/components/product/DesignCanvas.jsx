@@ -68,6 +68,12 @@ export default function DesignCanvas() {
               opacity: isMappedActive ? 1 : 0,
               zIndex: isMappedActive ? 10 : 0,
             }}
+            onError={(e) => {
+              if (e.target.src !== whiteShirt) {
+                console.warn(`Missing image for color variant: ${key}. Falling back to default white T-shirt.`);
+                e.target.src = whiteShirt;
+              }
+            }}
           />
         );
       })}
