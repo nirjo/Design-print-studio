@@ -48,7 +48,7 @@ export default function DesignCanvas() {
   const boundary = getPrintBoundary();
 
   return (
-    <div className="relative w-full aspect-[4/5] bg-gray-50 rounded-2xl overflow-hidden shadow-sm border border-gray-100 flex items-center justify-center">
+    <div id="design-canvas" className="relative w-full aspect-[4/5] bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 flex items-center justify-center">
       
       {/* Product Images (Preloaded & Faded) */}
       {Object.entries(COLOR_MAP).map(([key, info]) => {

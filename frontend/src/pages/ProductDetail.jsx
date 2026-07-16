@@ -2,9 +2,10 @@ import React, { useEffect, useState } from "react";
 
 import { useParams, Link } from "react-router-dom";
 import axios from "axios";
-import { ShoppingBag, ArrowLeft, ChevronDown, Check, Star } from "lucide-react";
+import { ShoppingBag, ArrowLeft, ChevronDown, Check, Star, Eye, Share2, X } from "lucide-react";
 import * as Tabs from "@radix-ui/react-tabs";
 import * as Accordion from "@radix-ui/react-accordion";
+import html2canvas from "html2canvas";
 import { toast, Toaster } from "sonner";
 import { useCart } from "../context/CartContext";
 import { useProductStore } from "../store/useProductStore";
@@ -23,10 +24,68 @@ export default function ProductDetail() {
   } = useProductStore();
   
   const [loading, setLoading] = useState(true);
+  const [previewImage, setPreviewImage] = useState(null);
+  const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
+
+  const handlePreview = async () => {
+    const canvasElement = document.getElementById('design-canvas');
+    if (!canvasElement) return;
+    
+    setIsGeneratingPreview(true);
+    try {
+      // Small delay to ensure all UI is settled
+      await new Promise(r => setTimeout(r, 100));
+      const canvas = await html2canvas(canvasElement, {
+        useCORS: true,
+        scale: 2, // High res
+        backgroundColor: null
+      });
+      setPreviewImage(canvas.toDataURL("image/png"));
+    } catch (err) {
+      toast.error("Failed to generate preview");
+    } finally {
+      setIsGeneratingPreview(false);
+    }
+  };
+
+  const handleShareWhatsApp = async () => {
+    if (!previewImage) return;
+    
+    // Check if Web Share API is supported (mostly mobile + some desktop browsers)
+    if (navigator.share) {
+      try {
+        const response = await fetch(previewImage);
+        const blob = await response.blob();
+        const file = new File([blob], 'my-custom-design.png', { type: 'image/png' });
+        
+        await navigator.share({
+          title: 'My Custom T-Shirt Design',
+          text: `Check out my custom design for ${product.name}!`,
+          files: [file]
+        });
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          toast.error("Sharing failed or not supported on this browser.");
+        }
+      }
+    } else {
+      // Fallback: Download image and open WhatsApp Web
+      const link = document.createElement('a');
+      link.download = 'my-custom-design.png';
+      link.href = previewImage;
+      link.click();
+      
+      const message = encodeURIComponent(`Check out my custom design for ${product.name}! I've just saved the image.`);
+      window.open(`https://wa.me/?text=${message}`, '_blank');
+      toast.success("Image downloaded. You can now send it on WhatsApp.");
+    }
+  };
 
   useEffect(() => {
     axios.get(`${API}/products/${id}`).then((r) => {
       setProduct(r.data);
+      if (r.data.colors?.length > 0) setColor(r.data.colors[0].toLowerCase());
+      if (r.data.sizes?.length > 0) setSize(r.data.sizes[1] || r.data.sizes[0]);
       setLoading(false);
     }).catch(() => {
       setLoading(false);
@@ -138,6 +197,13 @@ export default function ProductDetail() {
                 <button onClick={() => setQuantity(quantity + 1)} className="w-10 h-full flex items-center justify-center text-gray-500 hover:text-black hover:bg-gray-50 rounded-lg transition-colors">+</button>
               </div>
               <button 
+                onClick={handlePreview}
+                disabled={isGeneratingPreview}
+                className="px-6 border border-gray-200 text-gray-700 rounded-xl h-14 font-semibold tracking-wide flex items-center justify-center gap-2 hover:bg-gray-50 transition-all active:scale-[0.98] disabled:opacity-50"
+              >
+                <Eye size={18} /> {isGeneratingPreview ? "Loading..." : "Preview"}
+              </button>
+              <button 
                 onClick={handleAdd}
                 className="flex-1 bg-black text-white rounded-xl h-14 font-semibold tracking-wide flex items-center justify-center gap-2 hover:bg-gray-800 transition-all active:scale-[0.98] shadow-lg shadow-black/10"
               >
@@ -171,6 +237,43 @@ export default function ProductDetail() {
           </div>
         </div>
       </main>
+
+      {/* PREVIEW MODAL */}
+      {previewImage && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setPreviewImage(null)} />
+          
+          {/* Modal Content */}
+          <div className="relative bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-fade-in flex flex-col max-h-full">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100">
+              <h3 className="font-semibold text-lg tracking-tight">Design Preview</h3>
+              <button onClick={() => setPreviewImage(null)} className="p-2 text-gray-400 hover:text-gray-800 rounded-full hover:bg-gray-100 transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-auto bg-gray-50 flex justify-center">
+              <img src={previewImage} alt="Design Preview" className="max-h-[60vh] object-contain rounded-xl shadow-sm border border-gray-200" />
+            </div>
+            
+            <div className="p-5 border-t border-gray-100 flex flex-col sm:flex-row gap-3">
+              <button 
+                onClick={handleShareWhatsApp}
+                className="flex-1 bg-[#25D366] text-white py-3.5 rounded-xl font-semibold tracking-wide flex items-center justify-center gap-2 hover:bg-[#20bd5a] transition-colors shadow-sm"
+              >
+                <Share2 size={18} /> Share on WhatsApp
+              </button>
+              <button 
+                onClick={() => setPreviewImage(null)}
+                className="flex-1 sm:flex-none sm:px-8 border border-gray-200 text-gray-700 py-3.5 rounded-xl font-semibold tracking-wide hover:bg-gray-50 transition-colors"
+              >
+                Continue Editing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

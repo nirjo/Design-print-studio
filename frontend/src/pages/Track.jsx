@@ -41,6 +41,7 @@ export default function Track() {
   // Auto-lookup if URL has ?id= and ?phone=
   useEffect(() => {
     if (sp.get("id") && sp.get("phone") && !order && !busy) lookup();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const cancelled = order?.status === "cancelled";
