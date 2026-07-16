@@ -6,7 +6,7 @@ import sys
 import uuid
 from pathlib import Path
 from dotenv import load_dotenv
-from motor.motor_asyncio import AsyncIOMotorClient
+from supabase import create_client, Client
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
@@ -45,9 +45,13 @@ PROMPTS = {
 
 async def main():
     api_key = os.environ["EMERGENT_LLM_KEY"]
-    db_name = os.environ["DB_NAME"]
-    mongo = AsyncIOMotorClient(os.environ["MONGO_URL"])
-    db = mongo[db_name]
+    supabase_url = os.environ.get("SUPABASE_URL", "")
+    supabase_key = os.environ.get("SUPABASE_KEY", "")
+    supabase: Client = create_client(supabase_url, supabase_key) if supabase_url and supabase_key else None
+    
+    if not supabase:
+        print("ERR: SUPABASE_URL or SUPABASE_KEY not found in .env")
+        return
 
     for pid, prompt in PROMPTS.items():
         print(f"→ {pid}")
@@ -68,7 +72,8 @@ async def main():
         fid = uuid.uuid4().hex
         path = f"{APP_NAME}/mockups/{pid}/{fid}.{ext}"
         result = put_object(path, data, mime)
-        await db.files.insert_one({
+        
+        supabase.table("files").insert({
             "id": fid,
             "storage_path": result["path"],
             "original_filename": f"{pid}.{ext}",
@@ -76,12 +81,12 @@ async def main():
             "size": result.get("size", len(data)),
             "folder": "mockups",
             "is_deleted": False,
-        })
-        await db.products.update_one({"id": pid}, {"$set": {"image": f"/api/files/{fid}"}})
+        }).execute()
+        
+        supabase.table("products").update({"image": f"/api/files/{fid}"}).eq("id", pid).execute()
         print(f"   ✓ stored {fid} (size={len(data)})")
 
     print("Done.")
-    mongo.close()
 
 
 if __name__ == "__main__":

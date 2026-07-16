@@ -1,7 +1,7 @@
 from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File, Form, Request, Response, Query, Header, Cookie, Depends
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
+from supabase import create_async_client, AsyncClient
 import os
 import logging
 import requests
@@ -18,9 +18,9 @@ load_dotenv(ROOT_DIR / '.env')
 
 from storage import init_storage, put_object, get_object, APP_NAME, MIME_BY_EXT
 
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+supabase_url = os.environ.get("SUPABASE_URL", "")
+supabase_key = os.environ.get("SUPABASE_KEY", "")
+supabase: AsyncClient = None
 
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "").lower()
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY")
@@ -216,12 +216,19 @@ SEED_GALLERY = [
 
 
 async def seed_db():
-    if await db.products.count_documents({}) == 0:
-        await db.products.insert_many([{**p} for p in SEED_PRODUCTS])
-        logger.info("Seeded %d products", len(SEED_PRODUCTS))
-    if await db.gallery.count_documents({}) == 0:
-        await db.gallery.insert_many([{**g} for g in SEED_GALLERY])
-        logger.info("Seeded %d gallery items", len(SEED_GALLERY))
+    if not supabase: return
+    try:
+        p_res = await supabase.table("products").select("id", count="exact").limit(1).execute()
+        if p_res.count == 0:
+            await supabase.table("products").insert([{**p} for p in SEED_PRODUCTS]).execute()
+            logger.info("Seeded %d products", len(SEED_PRODUCTS))
+            
+        g_res = await supabase.table("gallery").select("id", count="exact").limit(1).execute()
+        if g_res.count == 0:
+            await supabase.table("gallery").insert([{**g} for g in SEED_GALLERY]).execute()
+            logger.info("Seeded %d gallery items", len(SEED_GALLERY))
+    except Exception as e:
+        logger.warning(f"Seed DB failed (check if tables exist): {e}")
 
 
 # ----------- AUTH -----------
@@ -230,14 +237,18 @@ async def get_current_user(
     session_token: Optional[str] = Cookie(None),
     authorization: Optional[str] = Header(None),
 ) -> Optional[User]:
+    if not supabase: return None
     token = session_token
     if not token and authorization and authorization.lower().startswith("bearer "):
         token = authorization.split(None, 1)[1].strip()
     if not token:
         return None
-    sess = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
+        
+    sess_res = await supabase.table("user_sessions").select("*").eq("session_token", token).execute()
+    sess = sess_res.data[0] if sess_res.data else None
     if not sess:
         return None
+        
     expires_at = sess.get("expires_at")
     if isinstance(expires_at, str):
         expires_at = datetime.fromisoformat(expires_at)
@@ -245,7 +256,9 @@ async def get_current_user(
         expires_at = expires_at.replace(tzinfo=timezone.utc)
     if expires_at and expires_at < now_utc():
         return None
-    user = await db.users.find_one({"user_id": sess["user_id"]}, {"_id": 0})
+        
+    user_res = await supabase.table("users").select("*").eq("user_id", sess["user_id"]).execute()
+    user = user_res.data[0] if user_res.data else None
     if not user:
         return None
     return User(**user)
@@ -268,6 +281,9 @@ async def auth_session(payload: Dict[str, str], response: Response):
     session_id = payload.get("session_id")
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id required")
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
+        
     # exchange session_id with Emergent
     r = requests.get(
         "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
@@ -286,35 +302,32 @@ async def auth_session(payload: Dict[str, str], response: Response):
 
     is_admin = bool(ADMIN_EMAIL) and email == ADMIN_EMAIL
 
-    existing = await db.users.find_one({"email": email}, {"_id": 0})
+    existing_res = await supabase.table("users").select("*").eq("email", email).execute()
+    existing = existing_res.data[0] if existing_res.data else None
+    
     if existing:
         user_id = existing["user_id"]
-        await db.users.update_one(
-            {"user_id": user_id},
-            {"$set": {"name": name, "picture": picture, "is_admin": is_admin}},
-        )
+        supabase.table("users").update(
+            {"name": name, "picture": picture, "is_admin": is_admin}
+        ).eq("user_id", user_id).execute()
     else:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
-        await db.users.insert_one({
+        supabase.table("users").insert({
             "user_id": user_id,
             "email": email,
             "name": name,
             "picture": picture,
             "is_admin": is_admin,
             "created_at": now_utc().isoformat(),
-        })
+        }).execute()
 
     expires_at = now_utc() + timedelta(days=7)
-    await db.user_sessions.update_one(
-        {"session_token": session_token},
-        {"$set": {
-            "session_token": session_token,
-            "user_id": user_id,
-            "expires_at": expires_at.isoformat(),
-            "created_at": now_utc().isoformat(),
-        }},
-        upsert=True,
-    )
+    supabase.table("user_sessions").upsert({
+        "session_token": session_token,
+        "user_id": user_id,
+        "expires_at": expires_at.isoformat(),
+        "created_at": now_utc().isoformat(),
+    }).execute()
 
     response.set_cookie(
         key="session_token",
@@ -342,8 +355,8 @@ async def auth_logout(
     token = session_token
     if not token and authorization and authorization.lower().startswith("bearer "):
         token = authorization.split(None, 1)[1].strip()
-    if token:
-        await db.user_sessions.delete_one({"session_token": token})
+    if token and supabase:
+        await supabase.table("user_sessions").delete().eq("session_token", token).execute()
     response.delete_cookie("session_token", path="/")
     return {"ok": True}
 
@@ -356,29 +369,43 @@ async def root():
 
 @api_router.get("/products")
 async def list_products():
-    rows = await db.products.find({"is_active": {"$ne": False}}, {"_id": 0}).to_list(200)
-    return rows
+    if not supabase:
+        logger.warning("list_products: supabase client is None!")
+        return []
+    try:
+        res = await supabase.table("products").select("*").eq("is_active", True).execute()
+        logger.info("list_products: returned %d items", len(res.data))
+        return res.data
+    except Exception as e:
+        logger.exception("list_products failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @api_router.get("/products/{product_id}")
 async def get_product(product_id: str):
-    p = await db.products.find_one({"id": product_id}, {"_id": 0})
-    if not p:
+    if not supabase: raise HTTPException(status_code=500, detail="Supabase not configured")
+    res = await supabase.table("products").select("*").eq("id", product_id).execute()
+    if not res.data:
         raise HTTPException(status_code=404, detail="Product not found")
-    return p
+    return res.data[0]
 
 
 @api_router.get("/gallery")
 async def list_gallery(category: Optional[str] = None):
-    q = {} if not category or category.lower() == "all" else {"category": category}
-    return await db.gallery.find(q, {"_id": 0}).to_list(500)
+    if not supabase: return []
+    query = supabase.table("gallery").select("*")
+    if category and category.lower() != "all":
+        query = query.eq("category", category)
+    res = await query.execute()
+    return res.data
 
 
 @api_router.post("/orders", response_model=Order)
 async def create_order(payload: OrderCreate):
+    if not supabase: raise HTTPException(status_code=500, detail="Supabase not configured")
     order = Order(**payload.model_dump())
     doc = doc_dt_to_iso(order.model_dump())
-    await db.orders.insert_one(doc)
+    await supabase.table("orders").insert(doc).execute()
     return order
 
 
@@ -393,6 +420,7 @@ def _normalize_phone(p: str) -> str:
 
 @api_router.post("/orders/track")
 async def track_order(req: TrackRequest):
+    if not supabase: raise HTTPException(status_code=500, detail="Supabase not configured")
     raw_id = (req.order_id or "").strip()
     if not raw_id:
         raise HTTPException(status_code=400, detail="Order ID required")
@@ -400,19 +428,17 @@ async def track_order(req: TrackRequest):
     if len(norm_phone) < 10:
         raise HTTPException(status_code=400, detail="Phone must be 10 digits")
 
-    # Match either full UUID id OR a 6+ char prefix of the id (case-insensitive)
     candidates = []
-    full = await db.orders.find_one({"id": raw_id}, {"_id": 0})
-    if full:
-        candidates.append(full)
+    full_res = await supabase.table("orders").select("*").eq("id", raw_id).execute()
+    if full_res.data:
+        candidates.append(full_res.data[0])
     else:
         prefix = raw_id.lower()
-        async for doc in db.orders.find({"id": {"$regex": f"^{prefix}", "$options": "i"}}, {"_id": 0}).limit(5):
-            candidates.append(doc)
+        partial_res = await supabase.table("orders").select("*").ilike("id", f"{prefix}%").limit(5).execute()
+        candidates.extend(partial_res.data)
 
     for o in candidates:
         if _normalize_phone(o.get("customer_phone", "")) == norm_phone:
-            # Return a public-safe view (no internal fields beyond what we already store)
             return {
                 "id": o["id"],
                 "short_id": o["id"][:6].upper(),
@@ -431,16 +457,17 @@ async def track_order(req: TrackRequest):
 
 @api_router.post("/contact", response_model=Contact)
 async def create_contact(payload: ContactCreate):
+    if not supabase: raise HTTPException(status_code=500, detail="Supabase not configured")
     c = Contact(**payload.model_dump())
     doc = doc_dt_to_iso(c.model_dump())
-    await db.contacts.insert_one(doc)
+    await supabase.table("contacts").insert(doc).execute()
     return c
 
 
 # ----------- UPLOADS -----------
 @api_router.post("/upload")
 async def upload(file: UploadFile = File(...), folder: str = Form("artwork")):
-    """Public artwork upload for customer-submitted print files (up to 25 MB)."""
+    if not supabase: raise HTTPException(status_code=500, detail="Supabase not configured")
     data = await file.read()
     if len(data) > 25 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File too large (25 MB max)")
@@ -463,8 +490,7 @@ async def upload(file: UploadFile = File(...), folder: str = Form("artwork")):
         "is_deleted": False,
         "created_at": now_utc().isoformat(),
     }
-    await db.files.insert_one(rec)
-    # Build a backend URL the frontend can use directly in <img src>
+    await supabase.table("files").insert(rec).execute()
     backend_origin = os.environ.get("PUBLIC_BACKEND_URL", "")
     url = f"/api/files/{fid}"
     return {"id": fid, "url": url, "absolute_url": (backend_origin + url) if backend_origin else url, "content_type": content_type, "size": rec["size"]}
@@ -472,7 +498,9 @@ async def upload(file: UploadFile = File(...), folder: str = Form("artwork")):
 
 @api_router.get("/files/{file_id}")
 async def serve_file(file_id: str):
-    rec = await db.files.find_one({"id": file_id, "is_deleted": False}, {"_id": 0})
+    if not supabase: raise HTTPException(status_code=500, detail="Supabase not configured")
+    res = await supabase.table("files").select("*").eq("id", file_id).eq("is_deleted", False).execute()
+    rec = res.data[0] if res.data else None
     if not rec:
         raise HTTPException(status_code=404, detail="Not found")
     try:
@@ -488,46 +516,53 @@ admin = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
 
 @admin.post("/products")
 async def admin_create_product(p: Product):
-    if await db.products.find_one({"id": p.id}):
+    if not supabase: raise HTTPException(status_code=500, detail="Supabase not configured")
+    res = await supabase.table("products").select("id").eq("id", p.id).execute()
+    if res.data:
         raise HTTPException(status_code=409, detail="Product id already exists")
-    await db.products.insert_one(p.model_dump())
+    await supabase.table("products").insert(p.model_dump()).execute()
     return p
 
 
 @admin.put("/products/{product_id}")
 async def admin_update_product(product_id: str, p: Product):
-    res = await db.products.update_one({"id": product_id}, {"$set": p.model_dump()})
-    if res.matched_count == 0:
+    if not supabase: raise HTTPException(status_code=500, detail="Supabase not configured")
+    res = await supabase.table("products").update(p.model_dump()).eq("id", product_id).execute()
+    if not res.data:
         raise HTTPException(status_code=404, detail="Not found")
     return p
 
 
 @admin.delete("/products/{product_id}")
 async def admin_delete_product(product_id: str):
-    res = await db.products.delete_one({"id": product_id})
-    if res.deleted_count == 0:
+    if not supabase: raise HTTPException(status_code=500, detail="Supabase not configured")
+    res = await supabase.table("products").delete().eq("id", product_id).execute()
+    if not res.data:
         raise HTTPException(status_code=404, detail="Not found")
     return {"ok": True}
 
 
 @admin.post("/gallery")
 async def admin_create_gallery(item: GalleryItem):
-    await db.gallery.insert_one(item.model_dump())
+    if not supabase: raise HTTPException(status_code=500, detail="Supabase not configured")
+    await supabase.table("gallery").insert(item.model_dump()).execute()
     return item
 
 
 @admin.put("/gallery/{item_id}")
 async def admin_update_gallery(item_id: str, item: GalleryItem):
-    res = await db.gallery.update_one({"id": item_id}, {"$set": item.model_dump()})
-    if res.matched_count == 0:
+    if not supabase: raise HTTPException(status_code=500, detail="Supabase not configured")
+    res = await supabase.table("gallery").update(item.model_dump()).eq("id", item_id).execute()
+    if not res.data:
         raise HTTPException(status_code=404, detail="Not found")
     return item
 
 
 @admin.delete("/gallery/{item_id}")
 async def admin_delete_gallery(item_id: str):
-    res = await db.gallery.delete_one({"id": item_id})
-    if res.deleted_count == 0:
+    if not supabase: raise HTTPException(status_code=500, detail="Supabase not configured")
+    res = await supabase.table("gallery").delete().eq("id", item_id).execute()
+    if not res.data:
         raise HTTPException(status_code=404, detail="Not found")
     return {"ok": True}
 
@@ -542,17 +577,22 @@ class OrderStatusUpdate(BaseModel):
 
 @admin.get("/orders")
 async def admin_orders():
-    rows = await db.orders.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
-    return rows
+    if not supabase: return []
+    res = await supabase.table("orders").select("*").order("created_at", desc=True).limit(500).execute()
+    return res.data
 
 
 @admin.patch("/orders/{order_id}/status")
 async def admin_update_order_status(order_id: str, body: OrderStatusUpdate, user: User = Depends(require_admin)):
+    if not supabase: raise HTTPException(status_code=500, detail="Supabase not configured")
     if body.status not in ALLOWED_STATUSES:
         raise HTTPException(status_code=400, detail=f"Invalid status. Allowed: {ALLOWED_STATUSES}")
-    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    
+    order_res = await supabase.table("orders").select("*").eq("id", order_id).execute()
+    order = order_res.data[0] if order_res.data else None
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+        
     prev_status = order.get("status", "pending")
     entry = {
         "status": body.status,
@@ -562,11 +602,15 @@ async def admin_update_order_status(order_id: str, body: OrderStatusUpdate, user
     }
     history = order.get("status_history", [])
     history.append(entry)
-    await db.orders.update_one(
-        {"id": order_id},
-        {"$set": {"status": body.status, "status_history": history, "updated_at": now_utc().isoformat()}},
-    )
-    updated = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    
+    supabase.table("orders").update({
+        "status": body.status, 
+        "status_history": history, 
+        "updated_at": now_utc().isoformat()
+    }).eq("id", order_id).execute()
+    
+    updated_res = await supabase.table("orders").select("*").eq("id", order_id).execute()
+    updated = updated_res.data[0]
 
     # Auto-send invoice email on shipped transition
     email_status = "skipped"
@@ -585,10 +629,11 @@ async def admin_update_order_status(order_id: str, body: OrderStatusUpdate, user
                     eid = await send_shipping_email(customer_email, updated, pdf_bytes)
                     email_status = "sent" if eid else "failed"
                     if eid:
-                        await db.orders.update_one(
-                            {"id": order_id},
-                            {"$set": {"invoice_email_id": eid, "invoice_email_to": customer_email, "invoice_email_at": now_utc().isoformat()}},
-                        )
+                        supabase.table("orders").update({
+                            "invoice_email_id": eid, 
+                            "invoice_email_to": customer_email, 
+                            "invoice_email_at": now_utc().isoformat()
+                        }).eq("id", order_id).execute()
                         updated["invoice_email_id"] = eid
                         updated["invoice_email_to"] = customer_email
             except Exception as e:
@@ -600,13 +645,15 @@ async def admin_update_order_status(order_id: str, body: OrderStatusUpdate, user
 
 @admin.get("/contacts")
 async def admin_contacts():
-    rows = await db.contacts.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
-    return rows
+    if not supabase: return []
+    res = await supabase.table("contacts").select("*").order("created_at", desc=True).limit(500).execute()
+    return res.data
 
 
 @admin.post("/generate-mockup")
 async def admin_generate_mockup(req: GenerateMockupReq):
     """Use Gemini Nano Banana to create a product mockup and store it."""
+    if not supabase: raise HTTPException(status_code=500, detail="Supabase not configured")
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
     except Exception as e:
@@ -647,7 +694,7 @@ async def admin_generate_mockup(req: GenerateMockupReq):
         "is_deleted": False,
         "created_at": now_utc().isoformat(),
     }
-    await db.files.insert_one(rec)
+    await supabase.table("files").insert(rec).execute()
     return {"id": fid, "url": f"/api/files/{fid}", "content_type": mime, "size": rec["size"]}
 
 
@@ -660,11 +707,15 @@ def _phone_matches(order: dict, phone: str) -> bool:
 
 
 async def _find_order(order_id: str):
-    o = await db.orders.find_one({"id": order_id}, {"_id": 0})
-    if o:
-        return o
-    async for doc in db.orders.find({"id": {"$regex": f"^{order_id.lower()}", "$options": "i"}}, {"_id": 0}).limit(1):
-        return doc
+    if not supabase: return None
+    res = await supabase.table("orders").select("*").eq("id", order_id).execute()
+    if res.data:
+        return res.data[0]
+    
+    prefix = order_id.lower()
+    partial_res = await supabase.table("orders").select("*").ilike("id", f"{prefix}%").limit(1).execute()
+    if partial_res.data:
+        return partial_res.data[0]
     return None
 
 
@@ -701,8 +752,9 @@ async def admin_invoice(order_id: str):
 
 @api_router.get("/admin/reviews", dependencies=[Depends(require_admin)])
 async def admin_reviews():
-    rows = await db.reviews.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
-    return rows
+    if not supabase: return []
+    res = await supabase.table("reviews").select("*").order("created_at", desc=True).limit(500).execute()
+    return res.data
 
 
 class ManualEmailRequest(BaseModel):
@@ -725,10 +777,13 @@ async def admin_email_invoice(order_id: str, body: ManualEmailRequest):
     eid = await send_shipping_email(target, o, pdf_bytes)
     if not eid:
         raise HTTPException(status_code=502, detail="Email send failed")
-    await db.orders.update_one(
-        {"id": o["id"]},
-        {"$set": {"invoice_email_id": eid, "invoice_email_to": target, "invoice_email_at": now_utc().isoformat()}},
-    )
+    
+    if supabase:
+        supabase.table("orders").update({
+            "invoice_email_id": eid, 
+            "invoice_email_to": target, 
+            "invoice_email_at": now_utc().isoformat()
+        }).eq("id", o["id"]).execute()
     return {"ok": True, "id": eid, "to": target}
 
 
@@ -744,6 +799,7 @@ class ReviewCreate(BaseModel):
 
 @api_router.post("/reviews")
 async def submit_review(payload: ReviewCreate):
+    if not supabase: raise HTTPException(status_code=500, detail="Supabase not configured")
     o = await _find_order(payload.order_id)
     if not o or not _phone_matches(o, payload.phone):
         raise HTTPException(status_code=404, detail="Order not found")
@@ -758,17 +814,15 @@ async def submit_review(payload: ReviewCreate):
         "allow_showcase": payload.allow_showcase,
         "created_at": now_utc().isoformat(),
     }
-    await db.reviews.insert_one(rec)
+    await supabase.table("reviews").insert(rec).execute()
     return {"ok": True, "id": rec["id"]}
 
 
 @api_router.get("/reviews/public")
 async def public_reviews(limit: int = 20):
-    rows = await db.reviews.find(
-        {"allow_showcase": True, "rating": {"$gte": 4}},
-        {"_id": 0},
-    ).sort("created_at", -1).to_list(limit)
-    return rows
+    if not supabase: return []
+    res = await supabase.table("reviews").select("*").eq("allow_showcase", True).gte("rating", 4).order("created_at", desc=True).limit(limit).execute()
+    return res.data
 
 
 app.include_router(api_router)
@@ -784,6 +838,9 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup():
+    global supabase
+    if supabase_url and supabase_key:
+        supabase = await create_async_client(supabase_url, supabase_key)
     await seed_db()
     try:
         init_storage()
@@ -793,4 +850,4 @@ async def startup():
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    client.close()
+    pass

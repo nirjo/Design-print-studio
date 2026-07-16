@@ -3,9 +3,9 @@ export const BRAND = {
   tagline: "Bring Your Ideas to Life",
   phone: "+91 91502 34277",
   phoneRaw: "919150234277",
-  email: "aielenterprises3321@gmail.com",
+  email: "aieldesignstudio@gmail.com",
   location: "Puducherry, India",
-  gst: "34GIQPS9151C",
+  gst: "34GIQPS9151C1ZT",
   assets: {
     nameboard: "https://customer-assets.emergentagent.com/job_b4501b93-3a10-4b2f-a3c7-52838db34c7b/artifacts/av4rfjdw_NameBoard.png",
     circular: "https://customer-assets.emergentagent.com/job_b4501b93-3a10-4b2f-a3c7-52838db34c7b/artifacts/a9hyb92e_Circular%20logo.png",
