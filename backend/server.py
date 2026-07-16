@@ -28,8 +28,40 @@ EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY")
 app = FastAPI(title="Aiel Design & Printing Studio API")
 api_router = APIRouter(prefix="/api")
 
-logger = logging.getLogger("aiel")
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("aiel")
+
+# Enable CORS for all origins (adjust in production)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Initialize Supabase client on startup
+@app.on_event("startup")
+async def init_supabase_client() -> None:
+    """Create the Supabase async client when the FastAPI app starts."""
+    global supabase
+    raw_url = os.getenv("SUPABASE_URL")
+    raw_key = os.getenv("SUPABASE_KEY")
+    # Trim whitespace that can cause auth failures
+    url = raw_url.strip() if raw_url else ""
+    key = raw_key.strip() if raw_key else ""
+    if not url or not key:
+        logger.error("Supabase URL or KEY not set in environment; Supabase client will be unavailable.")
+        supabase = None
+        return
+    # Debug log – mask the actual key value
+    logger.debug(f"Supabase URL: {url}, key length: {len(key)}")
+    try:
+        supabase = await create_async_client(url, key)
+        logger.info("Supabase client initialized successfully.")
+    except Exception as e:
+        logger.exception(f"Failed to initialize Supabase client: {e}")
+        supabase = None
 
 # ----------- HELPERS -----------
 def now_utc():

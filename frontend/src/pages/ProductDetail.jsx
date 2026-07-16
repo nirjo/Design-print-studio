@@ -5,12 +5,21 @@ import { ShoppingBag, MessageCircle, ArrowLeft, Upload, X } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { buildWhatsAppLink } from "../lib/brand";
 import { toast, Toaster } from "sonner";
+import FlipCard from "../components/FlipCard";
+import whiteShirt from "../assets/shirts/white.png";
+import blackShirt from "../assets/shirts/black.png";
+import redShirt from "../assets/shirts/red.png";
+import royalblueShirt from "../assets/shirts/royalblue.png";
+import yellowShirt from "../assets/shirts/yellow.png";
+
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 export default function ProductDetail() {
   const { id } = useParams();
   const { addItem, setOpen } = useCart();
+  const [showSurprise, setShowSurprise] = useState(false);
+  const [discount, setDiscount] = useState(null);
   const [product, setProduct] = useState(null);
   const [color, setColor] = useState("");
   const [size, setSize] = useState("");
@@ -96,14 +105,42 @@ export default function ProductDetail() {
         <div className="grid lg:grid-cols-12 gap-10">
           <div className="lg:col-span-7">
             <div className="relative crop-marks border border-ink bg-ink-surface p-3 sticky top-24">
-              <div className="aspect-[4/5] overflow-hidden bg-black relative">
-                <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
-                {artwork && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <img src={artworkAbsolute} alt="Your artwork" className="max-w-[45%] max-h-[40%] drop-shadow-2xl" />
+              <FlipCard
+                front={
+                  <img
+                    src={{
+                      white: whiteShirt,
+                      black: blackShirt,
+                      red: redShirt,
+                      royalblue: royalblueShirt,
+                      yellow: yellowShirt,
+                    }[color] || whiteShirt}
+                    alt={product.name}
+                    className="w-full h-full object-cover transition-opacity duration-500"
+                  />
+                }
+                back={
+                  <div className="flex items-center justify-center h-full bg-white">
+                    <span className="text-xl font-bold text-gray-700">Scratch Here</span>
                   </div>
-                )}
+                }
+                flipped={showSurprise}
+                onClick={() => setShowSurprise(!showSurprise)}
+              />
+              <div className="absolute top-6 right-6 flex items-center gap-2 bg-black/70 px-3 py-1.5 border border-white/10">
+                <span
+                  className="w-4 h-4 rounded-full border border-white/40"
+                  style={{ backgroundColor: color }}
+                />
+                <span className="text-[10px] uppercase tracking-[0.18em] text-white/80">
+                  {color ? color.charAt(0).toUpperCase() + color.slice(1) : ""}
+                </span>
               </div>
+              {artwork && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <img src={artworkAbsolute} alt="Your artwork" className="max-w-[45%] max-h-[40%] drop-shadow-2xl" />
+                </div>
+              )}
               <div className="absolute top-6 left-6 flex items-center gap-1">
                 <span className="w-3 h-3 bg-cmyk-cyan" />
                 <span className="w-3 h-3 bg-cmyk-magenta" />
@@ -131,14 +168,14 @@ export default function ProductDetail() {
             <div className="mt-8">
               <div className="text-xs uppercase tracking-[0.2em] text-white/55 mb-3">Color · <span className="text-white">{color}</span></div>
               <div className="flex flex-wrap gap-3">
-                {product.colors.map((c) => (
+                {['black','white','royalblue','red','yellow'].map((c) => (
                   <button
                     key={c}
-                    data-testid={`color-${c.replace(/\s+/g, '-').toLowerCase()}`}
+                    data-testid={`color-${c}`}
                     onClick={() => setColor(c)}
-                    className={`swatch ${color === c ? "active" : ""}`}
-                    style={{ background: product.color_hex?.[c] || "#888" }}
-                    title={c}
+                    className={`w-8 h-8 rounded-full border-2 transition-all duration-200 ${color === c ? 'border-cmyk-cyan shadow-lg' : 'border-transparent'}`}
+                    style={{ backgroundColor: c }}
+                    title={c.charAt(0).toUpperCase() + c.slice(1)}
                   />
                 ))}
               </div>
@@ -218,7 +255,36 @@ export default function ProductDetail() {
                 className="flex-1 bg-whatsapp text-black font-bold py-4 uppercase tracking-wider text-sm flex items-center justify-center gap-2 hover:bg-white transition-colors">
                 <MessageCircle size={18} /> Order on WhatsApp
               </button>
+              <button data-testid="surprise-card-btn" onClick={() => {
+                  const d = Math.floor(Math.random()*46)+5;
+                  setDiscount(d);
+                  setShowSurprise(true);
+                }}
+                className="flex-1 bg-cmyk-cyan text-black font-bold py-4 uppercase tracking-wider text-sm flex items-center justify-center gap-2 hover:bg-white transition-colors">
+                🎁 Surprise Card
+              </button>
             </div>
+
+            {showSurprise && (
+              <div className="fixed inset-0 flex items-center justify-center bg-black/70 z-50" onClick={() => setShowSurprise(false)}>
+                <FlipCard
+                  front={
+                    <div className="flex items-center justify-center w-full h-full bg-gray-300">
+                      <span className="text-xl font-bold text-gray-700 cursor-pointer" onClick={() => setShowSurprise(true)}>Scratch Here</span>
+                    </div>
+                  }
+                  back={
+                    <div className="flex flex-col items-center justify-center w-full h-full bg-white">
+                      <h2 className="text-2xl font-bold mb-4">Your Discount</h2>
+                      <p className="text-xl">You get <span className="text-cmyk-cyan font-extrabold">{discount}%</span> off!</p>
+                      <button onClick={() => setShowSurprise(false)} className="mt-4 px-4 py-2 bg-cmyk-magenta text-white hover:bg-cmyk-cyan">Close</button>
+                    </div>
+                  }
+                  flipped={showSurprise}
+                  onClick={() => setShowSurprise(!showSurprise)}
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>
