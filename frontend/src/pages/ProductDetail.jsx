@@ -1,65 +1,41 @@
 import React, { useEffect, useState } from "react";
+
 import { useParams, Link } from "react-router-dom";
 import axios from "axios";
-import { ShoppingBag, MessageCircle, ArrowLeft, Upload, X } from "lucide-react";
-import { useCart } from "../context/CartContext";
-import { buildWhatsAppLink } from "../lib/brand";
+import { ShoppingBag, ArrowLeft, ChevronDown, Check, Star } from "lucide-react";
+import * as Tabs from "@radix-ui/react-tabs";
+import * as Accordion from "@radix-ui/react-accordion";
 import { toast, Toaster } from "sonner";
-import FlipCard from "../components/FlipCard";
-import whiteShirt from "../assets/shirts/white.png";
-import blackShirt from "../assets/shirts/black.png";
-import redShirt from "../assets/shirts/red.png";
-import royalblueShirt from "../assets/shirts/royalblue.png";
-import yellowShirt from "../assets/shirts/yellow.png";
+import { useCart } from "../context/CartContext";
+import { useProductStore } from "../store/useProductStore";
 
+import DesignCanvas from "../components/product/DesignCanvas";
+import ProductOptions from "../components/product/ProductOptions";
+import DesignControls from "../components/product/DesignControls";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 export default function ProductDetail() {
   const { id } = useParams();
   const { addItem, setOpen } = useCart();
-  const [showSurprise, setShowSurprise] = useState(false);
-  const [discount, setDiscount] = useState(null);
-  const [product, setProduct] = useState(null);
-  const [color, setColor] = useState("");
-  const [size, setSize] = useState("");
-  const [qty, setQty] = useState(1);
-  const [printArea, setPrintArea] = useState("Front");
-  const [notes, setNotes] = useState("");
-  const [artwork, setArtwork] = useState(null); // { id, url, name }
-  const [uploading, setUploading] = useState(false);
+  const { 
+    setProduct, product, color, size, fabric, printMethod, quantity, setQuantity, totalPrice, layers, activePrintArea
+  } = useProductStore();
+  
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     axios.get(`${API}/products/${id}`).then((r) => {
       setProduct(r.data);
-      setColor(r.data.colors[0]);
-      setSize(r.data.sizes[1] || r.data.sizes[0]);
-    }).catch(() => {});
-  }, [id]);
+      setLoading(false);
+    }).catch(() => {
+      setLoading(false);
+    });
+  }, [id, setProduct]);
 
-  if (!product) {
-    return <div data-testid="product-loading" className="pt-32 text-center text-white/50">Loading…</div>;
+  if (loading || !product) {
+    return <div className="min-h-screen flex items-center justify-center bg-white"><div className="w-6 h-6 border-2 border-black border-t-transparent rounded-full animate-spin" /></div>;
   }
-
-  const price = Math.round((product.price_min + product.price_max) / 2);
-  const artworkAbsolute = artwork ? `${process.env.REACT_APP_BACKEND_URL}${artwork.url}` : "";
-
-  const handleUpload = async (file) => {
-    if (!file) return;
-    if (file.size > 25 * 1024 * 1024) { toast.error("File too large (25 MB max)"); return; }
-    setUploading(true);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("folder", "artwork");
-      const { data } = await axios.post(`${API}/upload`, fd);
-      setArtwork({ id: data.id, url: data.url, name: file.name });
-      toast.success("Artwork uploaded");
-    } catch (e) {
-      toast.error("Upload failed");
-    }
-    setUploading(false);
-  };
 
   const handleAdd = () => {
     addItem({
@@ -67,227 +43,134 @@ export default function ProductDetail() {
       product_name: product.name,
       size,
       color,
-      print_area: printArea,
-      quantity: qty,
-      unit_price: price,
-      notes,
-      artwork_url: artwork?.url || "",
+      fabric,
+      print_area: activePrintArea,
+      print_method: printMethod,
+      quantity,
+      unit_price: totalPrice / quantity,
+      design_layers: layers,
     });
-    toast.success(`${product.name} added to cart`, { description: `${color} · ${size} · ${printArea} × ${qty}` });
+    toast.success(`${product.name} added to cart`, { 
+      description: `${color} · ${size} · ${quantity} items` 
+    });
     setOpen(true);
   };
 
-  const handleWhatsApp = () => {
-    const lines = [
-      `Hi! I'd like to order:`,
-      ``,
-      `*${product.name}*`,
-      `Color: ${color}`,
-      `Size: ${size}`,
-      `Print: ${printArea}`,
-      `Qty: ${qty}`,
-      `Price: ₹${price * qty}`,
-    ];
-    if (notes) lines.push(`Notes: ${notes}`);
-    if (artwork) lines.push(`Artwork: ${process.env.REACT_APP_BACKEND_URL}${artwork.url}`);
-    lines.push("", "Please share confirmation & lead time.");
-    window.open(buildWhatsAppLink(lines.join("\n")), "_blank");
-  };
-
   return (
-    <div data-testid="product-detail-page" className="pt-24 md:pt-28 pb-20">
-      <Toaster theme="dark" position="top-right" />
-      <div className="max-w-7xl mx-auto px-5 md:px-10">
-        <Link to="/shop" className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-white/60 hover:text-cmyk-cyan mb-8">
-          <ArrowLeft size={14} /> Back to Shop
-        </Link>
+    <div className="bg-white min-h-screen font-sans text-gray-900 pb-24">
+      <Toaster theme="light" position="top-right" />
+      
+      {/* HEADER */}
+      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
+        <div className="max-w-screen-2xl mx-auto px-6 h-16 flex items-center justify-between">
+          <Link to="/shop" className="inline-flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-gray-500 hover:text-black transition-colors">
+            <ArrowLeft size={14} /> Back to Shop
+          </Link>
+          <div className="text-sm font-semibold tracking-widest uppercase">Aiel Studio</div>
+        </div>
+      </header>
 
-        <div className="grid lg:grid-cols-12 gap-10">
-          <div className="lg:col-span-7">
-            <div className="relative crop-marks border border-ink bg-ink-surface p-3 sticky top-24">
-              <FlipCard
-                front={
-                  <img
-                    src={{
-                      white: whiteShirt,
-                      black: blackShirt,
-                      red: redShirt,
-                      royalblue: royalblueShirt,
-                      yellow: yellowShirt,
-                    }[color] || whiteShirt}
-                    alt={product.name}
-                    className="w-full h-full object-cover transition-opacity duration-500"
-                  />
-                }
-                back={
-                  <div className="flex items-center justify-center h-full bg-white">
-                    <span className="text-xl font-bold text-gray-700">Scratch Here</span>
-                  </div>
-                }
-                flipped={showSurprise}
-                onClick={() => setShowSurprise(!showSurprise)}
-              />
-              <div className="absolute top-6 right-6 flex items-center gap-2 bg-black/70 px-3 py-1.5 border border-white/10">
-                <span
-                  className="w-4 h-4 rounded-full border border-white/40"
-                  style={{ backgroundColor: color }}
-                />
-                <span className="text-[10px] uppercase tracking-[0.18em] text-white/80">
-                  {color ? color.charAt(0).toUpperCase() + color.slice(1) : ""}
-                </span>
-              </div>
-              {artwork && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <img src={artworkAbsolute} alt="Your artwork" className="max-w-[45%] max-h-[40%] drop-shadow-2xl" />
+      <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
+        <div className="lg:grid lg:grid-cols-12 lg:gap-x-12 xl:gap-x-16">
+          
+          {/* LEFT: VISUALS (CANVAS) */}
+          <div className="lg:col-span-7 lg:sticky lg:top-24 lg:h-[calc(100vh-8rem)]">
+            <DesignCanvas />
+            
+            {/* Gallery Thumbnails (Static placeholders to match layout) */}
+            <div className="mt-4 grid grid-cols-4 gap-4">
+              {[1,2,3,4].map(i => (
+                <div key={i} className="aspect-square bg-gray-50 rounded-xl border border-gray-100 flex items-center justify-center text-gray-300 text-xs uppercase tracking-widest">
+                  View {i}
                 </div>
-              )}
-              <div className="absolute top-6 left-6 flex items-center gap-1">
-                <span className="w-3 h-3 bg-cmyk-cyan" />
-                <span className="w-3 h-3 bg-cmyk-magenta" />
-                <span className="w-3 h-3 bg-cmyk-yellow" />
-                <span className="w-3 h-3 bg-white" />
-              </div>
+              ))}
             </div>
           </div>
 
-          <div className="lg:col-span-5">
-            {product.tagline && (
-              <span className="inline-block text-[10px] uppercase tracking-[0.25em] bg-cmyk-yellow text-black px-2 py-1 font-bold mb-4">{product.tagline}</span>
-            )}
-            <h1 className="font-display text-5xl md:text-6xl uppercase leading-[0.9]">{product.name}</h1>
-            <p className="mt-2 text-sm text-white/55 uppercase tracking-[0.18em]">{product.fabric}</p>
-            <p className="mt-4 text-white/70 leading-relaxed">{product.description}</p>
-
-            <div className="mt-6 flex items-baseline gap-3">
-              <span className="font-display text-4xl text-cmyk-cyan">₹{product.price_min}</span>
-              <span className="text-white/40">–</span>
-              <span className="font-display text-4xl text-cmyk-magenta">₹{product.price_max}</span>
-              <span className="text-xs text-white/45 ml-2">(per piece)</span>
+          {/* RIGHT: DETAILS & CONTROLS */}
+          <div className="lg:col-span-5 mt-10 lg:mt-0">
+            
+            {/* Product Header */}
+            <div className="mb-8">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="flex text-yellow-400"><Star size={14} fill="currentColor" /><Star size={14} fill="currentColor" /><Star size={14} fill="currentColor" /><Star size={14} fill="currentColor" /><Star size={14} fill="currentColor" /></div>
+                <span className="text-xs font-medium text-gray-500">(128 Reviews)</span>
+              </div>
+              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-gray-900 mb-2">{product.name}</h1>
+              <p className="text-sm text-gray-500 leading-relaxed mb-6">{product.description}</p>
+              
+              <div className="flex items-end gap-3">
+                <span className="text-3xl font-light tracking-tight text-gray-900">₹{totalPrice}</span>
+                {quantity > 1 && <span className="text-sm text-gray-500 mb-1">Total for {quantity}</span>}
+              </div>
+              <div className="mt-2 flex items-center gap-2 text-xs font-medium text-green-600 bg-green-50 px-2.5 py-1 rounded-full w-fit">
+                <Check size={12} /> In Stock & Ready to Print
+              </div>
             </div>
 
-            <div className="mt-8">
-              <div className="text-xs uppercase tracking-[0.2em] text-white/55 mb-3">Color · <span className="text-white">{color}</span></div>
-              <div className="flex flex-wrap gap-3">
-                {['black','white','royalblue','red','yellow'].map((c) => (
-                  <button
-                    key={c}
-                    data-testid={`color-${c}`}
-                    onClick={() => setColor(c)}
-                    className={`w-8 h-8 rounded-full border-2 transition-all duration-200 ${color === c ? 'border-cmyk-cyan shadow-lg' : 'border-transparent'}`}
-                    style={{ backgroundColor: c }}
-                    title={c.charAt(0).toUpperCase() + c.slice(1)}
-                  />
+            {/* TABBED INTERFACE */}
+            <Tabs.Root defaultValue="options" className="mt-10">
+              <Tabs.List className="flex border-b border-gray-200 mb-6">
+                <Tabs.Trigger value="options" className="px-6 py-3 text-sm font-semibold uppercase tracking-wider text-gray-500 data-[state=active]:text-black data-[state=active]:border-b-2 data-[state=active]:border-black hover:text-gray-800 transition-colors">
+                  Product Options
+                </Tabs.Trigger>
+                <Tabs.Trigger value="design" className="px-6 py-3 text-sm font-semibold uppercase tracking-wider text-gray-500 data-[state=active]:text-black data-[state=active]:border-b-2 data-[state=active]:border-black hover:text-gray-800 transition-colors">
+                  Design Studio
+                </Tabs.Trigger>
+              </Tabs.List>
+
+              <Tabs.Content value="options" className="animate-fade-in outline-none">
+                <ProductOptions />
+              </Tabs.Content>
+
+              <Tabs.Content value="design" className="animate-fade-in outline-none">
+                <DesignControls />
+              </Tabs.Content>
+            </Tabs.Root>
+
+            <hr className="my-10 border-gray-100" />
+
+            {/* QUANTITY & ADD TO CART */}
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex items-center border border-gray-200 rounded-xl h-14 bg-white px-2">
+                <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="w-10 h-full flex items-center justify-center text-gray-500 hover:text-black hover:bg-gray-50 rounded-lg transition-colors">−</button>
+                <span className="w-12 text-center font-semibold text-sm">{quantity}</span>
+                <button onClick={() => setQuantity(quantity + 1)} className="w-10 h-full flex items-center justify-center text-gray-500 hover:text-black hover:bg-gray-50 rounded-lg transition-colors">+</button>
+              </div>
+              <button 
+                onClick={handleAdd}
+                className="flex-1 bg-black text-white rounded-xl h-14 font-semibold tracking-wide flex items-center justify-center gap-2 hover:bg-gray-800 transition-all active:scale-[0.98] shadow-lg shadow-black/10"
+              >
+                <ShoppingBag size={18} /> Add to Cart — ₹{totalPrice}
+              </button>
+            </div>
+
+            {/* PRODUCT INFO ACCORDION */}
+            <div className="mt-12">
+              <Accordion.Root type="multiple" className="border-t border-gray-200">
+                {[
+                  { title: "Product Details", content: "Premium 100% combed cotton, bio-washed for an ultra-soft feel. Durable stitching and true-to-size fit." },
+                  { title: "Fabric & Care", content: "Machine wash cold inside out. Do not bleach. Tumble dry low. Do not iron directly on print." },
+                  { title: "Shipping & Returns", content: "Orders are printed and shipped within 3-5 business days. 14-day hassle-free return policy on defective items." }
+                ].map((item, i) => (
+                  <Accordion.Item key={i} value={`item-${i}`} className="border-b border-gray-200">
+                    <Accordion.Header>
+                      <Accordion.Trigger className="flex items-center justify-between w-full py-5 text-sm font-semibold uppercase tracking-wider text-gray-900 hover:text-gray-600 transition-colors group">
+                        {item.title}
+                        <ChevronDown size={16} className="text-gray-400 group-data-[state=open]:rotate-180 transition-transform duration-300" />
+                      </Accordion.Trigger>
+                    </Accordion.Header>
+                    <Accordion.Content className="overflow-hidden text-sm text-gray-600 data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down">
+                      <div className="pb-5 leading-relaxed">{item.content}</div>
+                    </Accordion.Content>
+                  </Accordion.Item>
                 ))}
-              </div>
+              </Accordion.Root>
             </div>
 
-            <div className="mt-8">
-              <div className="text-xs uppercase tracking-[0.2em] text-white/55 mb-3">Size</div>
-              <div className="flex flex-wrap gap-2">
-                {product.sizes.map((s) => (
-                  <button key={s} data-testid={`size-${s}`} onClick={() => setSize(s)} className={`size-btn ${size === s ? "active" : ""}`}>
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-8 grid grid-cols-2 gap-4">
-              <div>
-                <div className="text-xs uppercase tracking-[0.2em] text-white/55 mb-3">Print Area</div>
-                <div className="flex gap-2">
-                  {["Front", "Back", "Both"].map((pa) => (
-                    <button key={pa} data-testid={`print-area-${pa.toLowerCase()}`} onClick={() => setPrintArea(pa)}
-                      className={`flex-1 py-2 text-xs uppercase tracking-[0.18em] border ${printArea === pa ? "bg-cmyk-magenta text-white border-cmyk-magenta" : "border-ink hover:border-cmyk-cyan"}`}>
-                      {pa}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs uppercase tracking-[0.2em] text-white/55 mb-3">Quantity</div>
-                <div className="flex items-center border border-ink h-10">
-                  <button data-testid="qty-dec" onClick={() => setQty(Math.max(1, qty - 1))} className="px-3 h-full hover:text-cmyk-cyan">−</button>
-                  <span data-testid="qty-value" className="flex-1 text-center font-bold">{qty}</span>
-                  <button data-testid="qty-inc" onClick={() => setQty(qty + 1)} className="px-3 h-full hover:text-cmyk-cyan">+</button>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-8">
-              <div className="text-xs uppercase tracking-[0.2em] text-white/55 mb-3">Your Artwork <span className="text-white/35">(optional, up to 25 MB)</span></div>
-              {artwork ? (
-                <div className="flex items-center gap-3 border border-ink bg-ink-surface p-3">
-                  <img src={artworkAbsolute} alt="" className="w-14 h-14 object-cover bg-white" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm truncate">{artwork.name}</div>
-                    <div className="text-[11px] text-cmyk-cyan">Preview added to mockup</div>
-                  </div>
-                  <button data-testid="artwork-remove" onClick={() => setArtwork(null)} className="p-2 text-white/60 hover:text-cmyk-magenta"><X size={16} /></button>
-                </div>
-              ) : (
-                <label data-testid="artwork-upload-label" className="flex items-center justify-center gap-2 border-2 border-dashed border-ink hover:border-cmyk-cyan p-5 cursor-pointer">
-                  <Upload size={18} />
-                  <span className="text-sm uppercase tracking-wider">{uploading ? "Uploading…" : "Upload PNG / JPG / PDF"}</span>
-                  <input data-testid="artwork-input" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" className="hidden" onChange={(e) => handleUpload(e.target.files?.[0])} />
-                </label>
-              )}
-            </div>
-
-            <div className="mt-6">
-              <div className="text-xs uppercase tracking-[0.2em] text-white/55 mb-3">Design Notes</div>
-              <textarea
-                data-testid="product-notes"
-                rows="3"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Position (chest / back / sleeve), colors, font, sizes, deadline…"
-                className="w-full bg-ink-surface border border-ink px-3 py-2 text-sm focus:border-cmyk-cyan outline-none resize-none"
-              />
-            </div>
-
-            <div className="mt-8 flex flex-col sm:flex-row gap-3">
-              <button data-testid="add-to-cart-btn" onClick={handleAdd}
-                className="flex-1 bg-cmyk-yellow text-black font-bold py-4 uppercase tracking-wider text-sm flex items-center justify-center gap-2 hover:bg-white transition-colors">
-                <ShoppingBag size={18} /> Add to Cart
-              </button>
-              <button data-testid="whatsapp-order-btn" onClick={handleWhatsApp}
-                className="flex-1 bg-whatsapp text-black font-bold py-4 uppercase tracking-wider text-sm flex items-center justify-center gap-2 hover:bg-white transition-colors">
-                <MessageCircle size={18} /> Order on WhatsApp
-              </button>
-              <button data-testid="surprise-card-btn" onClick={() => {
-                  const d = Math.floor(Math.random()*46)+5;
-                  setDiscount(d);
-                  setShowSurprise(true);
-                }}
-                className="flex-1 bg-cmyk-cyan text-black font-bold py-4 uppercase tracking-wider text-sm flex items-center justify-center gap-2 hover:bg-white transition-colors">
-                🎁 Surprise Card
-              </button>
-            </div>
-
-            {showSurprise && (
-              <div className="fixed inset-0 flex items-center justify-center bg-black/70 z-50" onClick={() => setShowSurprise(false)}>
-                <FlipCard
-                  front={
-                    <div className="flex items-center justify-center w-full h-full bg-gray-300">
-                      <span className="text-xl font-bold text-gray-700 cursor-pointer" onClick={() => setShowSurprise(true)}>Scratch Here</span>
-                    </div>
-                  }
-                  back={
-                    <div className="flex flex-col items-center justify-center w-full h-full bg-white">
-                      <h2 className="text-2xl font-bold mb-4">Your Discount</h2>
-                      <p className="text-xl">You get <span className="text-cmyk-cyan font-extrabold">{discount}%</span> off!</p>
-                      <button onClick={() => setShowSurprise(false)} className="mt-4 px-4 py-2 bg-cmyk-magenta text-white hover:bg-cmyk-cyan">Close</button>
-                    </div>
-                  }
-                  flipped={showSurprise}
-                  onClick={() => setShowSurprise(!showSurprise)}
-                />
-              </div>
-            )}
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
