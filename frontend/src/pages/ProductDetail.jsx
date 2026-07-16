@@ -13,6 +13,7 @@ import { useProductStore } from "../store/useProductStore";
 import DesignCanvas from "../components/product/DesignCanvas";
 import ProductOptions from "../components/product/ProductOptions";
 import DesignControls from "../components/product/DesignControls";
+import ScratchCardModal from "../components/product/ScratchCardModal";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -20,12 +21,13 @@ export default function ProductDetail() {
   const { id } = useParams();
   const { addItem, setOpen } = useCart();
   const { 
-    setProduct, product, color, size, fabric, printMethod, quantity, setQuantity, totalPrice, layers, activePrintArea
+    setProduct, product, color, size, fabric, printMethod, quantity, setQuantity, pricing, layers, activePrintArea, isFlipped, setIsFlipped, scratchDiscount
   } = useProductStore();
   
   const [loading, setLoading] = useState(true);
   const [previewImage, setPreviewImage] = useState(null);
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
+  const [showScratchCard, setShowScratchCard] = useState(false);
 
   const handlePreview = async () => {
     const canvasElement = document.getElementById('design-canvas');
@@ -103,10 +105,9 @@ export default function ProductDetail() {
       size,
       color,
       fabric,
-      print_area: activePrintArea,
       print_method: printMethod,
       quantity,
-      unit_price: totalPrice / quantity,
+      unit_price: pricing.finalPrice / quantity,
       design_layers: layers,
     });
     toast.success(`${product.name} added to cart`, { 
@@ -133,16 +134,16 @@ export default function ProductDetail() {
         <div className="lg:grid lg:grid-cols-12 lg:gap-x-12 xl:gap-x-16">
           
           {/* LEFT: VISUALS (CANVAS) */}
-          <div className="lg:col-span-7 lg:sticky lg:top-24 lg:h-[calc(100vh-8rem)]">
+          <div className="lg:col-span-7 lg:sticky lg:top-24 lg:h-[calc(100vh-8rem)] flex flex-col">
             <DesignCanvas />
             
-            {/* Gallery Thumbnails (Static placeholders to match layout) */}
-            <div className="mt-4 grid grid-cols-4 gap-4">
-              {[1,2,3,4].map(i => (
-                <div key={i} className="aspect-square bg-gray-50 rounded-xl border border-gray-100 flex items-center justify-center text-gray-300 text-xs uppercase tracking-widest">
-                  View {i}
-                </div>
-              ))}
+            <div className="mt-4 flex items-center justify-between">
+              <button 
+                onClick={() => setIsFlipped(!isFlipped)}
+                className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full text-sm font-semibold tracking-wide transition-colors"
+              >
+                Flip to {isFlipped ? "Front" : "Back"}
+              </button>
             </div>
           </div>
 
@@ -158,12 +159,39 @@ export default function ProductDetail() {
               <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-gray-900 mb-2">{product.name}</h1>
               <p className="text-sm text-gray-500 leading-relaxed mb-6">{product.description}</p>
               
-              <div className="flex items-end gap-3">
-                <span className="text-3xl font-light tracking-tight text-gray-900">₹{totalPrice}</span>
-                {quantity > 1 && <span className="text-sm text-gray-500 mb-1">Total for {quantity}</span>}
-              </div>
-              <div className="mt-2 flex items-center gap-2 text-xs font-medium text-green-600 bg-green-50 px-2.5 py-1 rounded-full w-fit">
-                <Check size={12} /> In Stock & Ready to Print
+              <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 relative overflow-hidden">
+                <div className="flex flex-col gap-1 relative z-10">
+                  {pricing.totalSavings > 0 && (
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-lg font-medium text-gray-400 line-through">₹{pricing.originalTotalPrice.toFixed(2)}</span>
+                      <span className="text-sm font-bold text-cmyk-magenta uppercase tracking-wider bg-cmyk-magenta/10 px-2 py-0.5 rounded-md">
+                        Save ₹{pricing.totalSavings.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex items-end gap-3">
+                    <span className="text-4xl font-bold tracking-tight text-gray-900">₹{pricing.finalPrice.toFixed(2)}</span>
+                    {quantity > 1 && <span className="text-sm text-gray-500 mb-2">Total for {quantity}</span>}
+                  </div>
+                  
+                  {/* LIVE PRICE PANEL BREAKDOWN */}
+                  {pricing.totalSavings > 0 && (
+                    <div className="mt-4 pt-4 border-t border-gray-200 text-sm space-y-2 text-gray-600">
+                      {pricing.scratchAmount > 0 && (
+                        <div className="flex justify-between">
+                          <span>Scratch Reward ({scratchDiscount}%)</span>
+                          <span className="text-green-600 font-medium">-₹{pricing.scratchAmount.toFixed(2)}</span>
+                        </div>
+                      )}
+                      {pricing.bulkAmount > 0 && (
+                        <div className="flex justify-between">
+                          <span>Bulk Discount ({pricing.bulkPercent}%)</span>
+                          <span className="text-green-600 font-medium">-₹{pricing.bulkAmount.toFixed(2)}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -189,26 +217,47 @@ export default function ProductDetail() {
 
             <hr className="my-10 border-gray-100" />
 
+            {/* SCRATCH CARD BUTTON */}
+            {!scratchDiscount ? (
+              <div className="mb-8">
+                <button 
+                  onClick={() => setShowScratchCard(true)}
+                  className="w-full bg-gradient-to-r from-yellow-400 to-yellow-500 text-yellow-950 rounded-xl h-14 font-bold tracking-wide flex items-center justify-center gap-2 hover:from-yellow-500 hover:to-yellow-600 transition-all shadow-md animate-pulse"
+                >
+                  🎁 Unlock Your Surprise Discount
+                </button>
+              </div>
+            ) : null}
+
             {/* QUANTITY & ADD TO CART */}
             <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex items-center border border-gray-200 rounded-xl h-14 bg-white px-2">
-                <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="w-10 h-full flex items-center justify-center text-gray-500 hover:text-black hover:bg-gray-50 rounded-lg transition-colors">−</button>
-                <span className="w-12 text-center font-semibold text-sm">{quantity}</span>
-                <button onClick={() => setQuantity(quantity + 1)} className="w-10 h-full flex items-center justify-center text-gray-500 hover:text-black hover:bg-gray-50 rounded-lg transition-colors">+</button>
+              <div className="flex flex-col gap-1 w-full sm:w-32">
+                <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Quantity</span>
+                <div className="flex items-center border border-gray-200 rounded-xl h-14 bg-white px-2">
+                  <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="w-10 h-full flex items-center justify-center text-gray-500 hover:text-black hover:bg-gray-50 rounded-lg transition-colors">−</button>
+                  <span className="w-12 text-center font-semibold text-sm">{quantity}</span>
+                  <button onClick={() => setQuantity(quantity + 1)} className="w-10 h-full flex items-center justify-center text-gray-500 hover:text-black hover:bg-gray-50 rounded-lg transition-colors">+</button>
+                </div>
               </div>
-              <button 
-                onClick={handlePreview}
-                disabled={isGeneratingPreview}
-                className="px-6 border border-gray-200 text-gray-700 rounded-xl h-14 font-semibold tracking-wide flex items-center justify-center gap-2 hover:bg-gray-50 transition-all active:scale-[0.98] disabled:opacity-50"
-              >
-                <Eye size={18} /> {isGeneratingPreview ? "Loading..." : "Preview"}
-              </button>
-              <button 
-                onClick={handleAdd}
-                className="flex-1 bg-black text-white rounded-xl h-14 font-semibold tracking-wide flex items-center justify-center gap-2 hover:bg-gray-800 transition-all active:scale-[0.98] shadow-lg shadow-black/10"
-              >
-                <ShoppingBag size={18} /> Add to Cart — ₹{totalPrice}
-              </button>
+              
+              <div className="flex flex-col gap-1 flex-1">
+                <span className="text-xs font-semibold uppercase tracking-wider text-transparent select-none">Action</span>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={handlePreview}
+                    disabled={isGeneratingPreview}
+                    className="px-6 border border-gray-200 text-gray-700 rounded-xl h-14 font-semibold tracking-wide flex items-center justify-center gap-2 hover:bg-gray-50 transition-all active:scale-[0.98] disabled:opacity-50"
+                  >
+                    <Eye size={18} /> {isGeneratingPreview ? "..." : "Preview"}
+                  </button>
+                  <button 
+                    onClick={handleAdd}
+                    className="flex-1 bg-black text-white rounded-xl h-14 font-semibold tracking-wide flex items-center justify-center gap-2 hover:bg-gray-800 transition-all active:scale-[0.98] shadow-lg shadow-black/10"
+                  >
+                    <ShoppingBag size={18} /> Add to Cart — ₹{pricing.finalPrice.toFixed(0)}
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* PRODUCT INFO ACCORDION */}
@@ -274,6 +323,9 @@ export default function ProductDetail() {
           </div>
         </div>
       )}
+
+      {/* SCRATCH CARD MODAL */}
+      <ScratchCardModal isOpen={showScratchCard} onClose={() => setShowScratchCard(false)} />
     </div>
   );
 }
